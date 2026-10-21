@@ -1,6 +1,7 @@
 """Settings. Partner credentials come from the environment only; nothing merchant-secret is ever configured."""
 
 from functools import lru_cache
+from urllib.parse import quote
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -20,6 +21,7 @@ class Settings(BaseSettings):
 
     # Supabase.
     database_url: str = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+    database_password: str = ""  # substituted for YOUR-PASSWORD in database_url, URL-encoded
     supabase_url: str = "http://127.0.0.1:54321"
     supabase_service_role_key: str = ""
     supabase_jwt_secret: str = ""  # HS256 secret; when empty, tokens are verified against the project's JWKS
@@ -41,6 +43,8 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     settings = Settings()
+    if settings.database_password and "YOUR-PASSWORD" in settings.database_url:
+        settings.database_url = settings.database_url.replace("YOUR-PASSWORD", quote(settings.database_password, safe=""))
     if settings.paypal_base_url != SANDBOX_BASE_URL:
         raise RuntimeError("BundoPay is sandbox-only; PAYPAL_BASE_URL must be the sandbox host.")
     return settings

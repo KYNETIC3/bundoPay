@@ -18,7 +18,7 @@ async def open_pool() -> AsyncConnectionPool:
     global _pool
     if _pool is None:
         _pool = AsyncConnectionPool(
-            get_settings().database_url, kwargs={"row_factory": dict_row}, min_size=1, max_size=10, open=False
+            get_settings().database_url, kwargs={"row_factory": dict_row}, min_size=1, max_size=5, open=False  # API + worker stay under the Supabase session-pooler limit
         )
         await _pool.open()
     return _pool
