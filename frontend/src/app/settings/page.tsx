@@ -1,110 +1,223 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { Button, Card, CardTitle, Icon, Pill } from "@/components/ui";
 import { api } from "@/lib/api";
 import { FEATURE_COPY, dateTime } from "@/lib/format";
+import { useMerchant } from "@/lib/merchant";
 
-type Status = {
-  email: string;
-  paypal_merchant_id: string | null;
-  grant_status: string;
-  granted_scopes: string[];
-  connected_at: string | null;
-  last_synced_at: string | null;
-};
+type Rules = { auto_refund_enabled: boolean; auto_refund_limit: string };
+type DataSummary = { kind: string; rows: number; last_import: string }[];
 
-export default function Settings() {
-  const [s, setS] = useState<Status | null>(null);
+export default function SettingsPage() {
+  return (
+    <div className="mx-auto max-w-3xl space-y-5">
+      <PayPalCard />
+      <RefundLimitCard />
+      <StoreDataCard />
+    </div>
+  );
+}
+
+function PayPalCard() {
+  const { status, refresh } = useMerchant();
   const [confirming, setConfirming] = useState(false);
-
-  useEffect(() => {
-    api<Status>("/onboarding/status").then(setS);
-  }, []);
+  if (!status) return null;
+  const connected = status.grant_status === "granted";
 
   async function disconnect() {
     await api("/onboarding/disconnect", { method: "POST" });
-    setS(await api<Status>("/onboarding/status"));
     setConfirming(false);
+    await refresh();
   }
 
-  if (!s) return null;
   return (
-    <div className="narrow stack">
-      <h1>Settings</h1>
-
-      <div className="section">
-        <div className="section-head">
-          <h2>Connected account</h2>
-        </div>
-        <dl style={{ display: "grid", gridTemplateColumns: "10rem 1fr", gap: "6px 16px", margin: 0 }}>
-          <dt className="muted">Signed in as</dt>
-          <dd style={{ margin: 0 }}>{s.email}</dd>
-          <dt className="muted">PayPal merchant ID</dt>
-          <dd className="mono" style={{ margin: 0 }}>{s.paypal_merchant_id ?? "Not connected"}</dd>
-          <dt className="muted">Status</dt>
-          <dd style={{ margin: 0 }}>{s.grant_status.replace("_", " ")}</dd>
-          <dt className="muted">Connected</dt>
-          <dd style={{ margin: 0 }}>{dateTime(s.connected_at)}</dd>
-          <dt className="muted">Last sync</dt>
-          <dd style={{ margin: 0 }}>{dateTime(s.last_synced_at)}</dd>
-        </dl>
-      </div>
-
-      <div className="section">
-        <div className="section-head">
-          <h2>Granted permissions</h2>
-          <span className="muted">as reported by PayPal</span>
-        </div>
-        {s.granted_scopes.length === 0 ? (
-          <p className="muted">None.</p>
-        ) : (
-          <ul className="permissions">
-            {s.granted_scopes.map((f) => (
-              <li key={f}>
-                <span className="tick">✓</span>
-                <div>
-                  <h3>{FEATURE_COPY[f]?.title ?? f}</h3>
-                  <p className="muted">{FEATURE_COPY[f]?.why}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <div className="section">
-        <div className="section-head">
-          <h2>Disconnect</h2>
-        </div>
-        {s.grant_status === "granted" ? (
-          confirming ? (
-            <div className="notice stack">
-              <p>
-                BundoPay will stop reading and responding to your disputes. To revoke the permission on PayPal&rsquo;s side
-                as well, remove BundoPay under <em>Account Settings → API access</em> in your PayPal account.
-              </p>
-              <div className="row-actions">
-                <button className="btn" onClick={disconnect}>
-                  Disconnect
-                </button>
-                <button className="btn quiet" onClick={() => setConfirming(false)}>
-                  Keep connected
-                </button>
+    <Card>
+      <CardTitle action={<Pill tone={connected ? "cerulean" : "coral"}>{connected ? (status.test_mode ? "Test account" : "Connected") : "Not connected"}</Pill>}>
+        PayPal account
+      </CardTitle>
+      {connected ? (
+        <>
+          <dl className="grid grid-cols-[8rem_1fr] gap-y-2 text-sm">
+            <dt className="text-muted">Merchant ID</dt>
+            <dd className="font-mono">{status.paypal_merchant_id}</dd>
+            <dt className="text-muted">Last sync</dt>
+            <dd>{dateTime(status.last_synced_at)}</dd>
+            <dt className="text-muted">Allowed to</dt>
+            <dd className="flex flex-wrap gap-1.5">
+              {status.granted_scopes.map((f) => <Pill key={f}>{FEATURE_COPY[f]?.title ?? f}</Pill>)}
+            </dd>
+          </dl>
+          <div className="mt-5 border-t border-line pt-4">
+            {confirming ? (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="mr-auto">BundoPay will stop working on your disputes.</span>
+                <Button onClick={disconnect} className="text-danger">Disconnect</Button>
+                <Button variant="ghost" onClick={() => setConfirming(false)}>Cancel</Button>
               </div>
-            </div>
-          ) : (
-            <button className="btn" onClick={() => setConfirming(true)}>
-              Disconnect PayPal…
-            </button>
-          )
-        ) : (
-          <Link className="btn primary" href="/onboarding">
-            Connect PayPal
-          </Link>
-        )}
+            ) : (
+              <Button variant="ghost" onClick={() => setConfirming(true)} className="text-danger">
+                <Icon name="link_off" className="text-[18px]" /> Disconnect
+              </Button>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted">Connect PayPal so the agent can see and answer your disputes.</p>
+          <Button variant="primary" href="/onboarding">Connect PayPal</Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function RefundLimitCard() {
+  const [rules, setRules] = useState<Rules | null>(null);
+  const [saved, setSaved] = useState<Rules | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<Rules>("/agent/settings")
+      .then((r) => {
+        setRules(r);
+        setSaved(r);
+      })
+      .catch((e: Error) => setMessage(e.message));
+  }, []);
+  if (!rules)
+    return message ? (
+      <Card>
+        <CardTitle>Agent refund limit</CardTitle>
+        <p className="text-sm text-danger">{message}</p>
+      </Card>
+    ) : null;
+  const limit = Number(rules.auto_refund_limit);
+  const dirty = JSON.stringify(rules) !== JSON.stringify(saved);
+
+  async function save() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const r = await api<Rules>("/agent/settings", {
+        method: "PUT",
+        body: JSON.stringify({ auto_refund_enabled: rules!.auto_refund_enabled, auto_refund_limit: limit.toFixed(2) }),
+      });
+      setRules(r);
+      setSaved(r);
+      setMessage("Saved");
+    } catch (e) {
+      setMessage((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <div id="agent" className="scroll-mt-24" />
+      <CardTitle>Agent refund limit</CardTitle>
+
+      <label className="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-line p-4">
+        <div>
+          <div className="font-semibold">Refund small disputes automatically</div>
+          <div className="text-sm text-muted">Without asking you first, when the case can&rsquo;t clearly be won.</div>
+        </div>
+        <input
+          type="checkbox"
+          role="switch"
+          checked={rules.auto_refund_enabled}
+          onChange={(e) => setRules({ ...rules, auto_refund_enabled: e.target.checked })}
+          className="peer sr-only"
+        />
+        <span className="relative h-6 w-11 shrink-0 rounded-full bg-line-strong transition peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary-container after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition peer-checked:after:translate-x-5" />
+      </label>
+
+      <div className={`mt-4 rounded-xl border border-line p-4 ${rules.auto_refund_enabled ? "" : "opacity-50"}`}>
+        <div className="mb-2 flex items-center justify-between">
+          <span className="font-semibold">Up to</span>
+          <span className="rounded-md bg-primary-fixed/60 px-2 py-0.5 font-mono text-lg font-bold text-primary tabular-nums">${limit.toFixed(2)}</span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={limit}
+          disabled={!rules.auto_refund_enabled}
+          onChange={(e) => setRules({ ...rules, auto_refund_limit: e.target.value })}
+          aria-label="Automatic refund limit"
+          className="w-full accent-primary"
+        />
+        <div className="flex justify-between font-mono text-[10px] text-muted">
+          <span>$0</span><span>$20 suggested</span><span>$100</span>
+        </div>
       </div>
-    </div>
+
+      <p className="mt-3 text-sm text-muted">
+        Above this amount, the agent prepares a refund or reply and waits for you to approve it.
+      </p>
+
+      <div className="mt-4 flex items-center gap-3">
+        <Button variant="primary" onClick={save} disabled={busy || !dirty}>Save</Button>
+        {message && <span className="text-sm text-muted">{message}</span>}
+      </div>
+    </Card>
+  );
+}
+
+const KINDS = [
+  { kind: "orders", label: "Orders", cols: "order_id, order_date, total, currency, paypal_transaction_id" },
+  { kind: "shipments", label: "Shipments", cols: "order_id, carrier, tracking_number, status" },
+  { kind: "refunds", label: "Refunds", cols: "order_id, refund_id, amount, currency, paypal_refund_id" },
+  { kind: "tickets", label: "Support tickets", cols: "order_id, ticket_id, created_at, summary" },
+];
+
+function StoreDataCard() {
+  const [summary, setSummary] = useState<DataSummary>([]);
+  const [msg, setMsg] = useState<Record<string, string>>({});
+  const load = () => api<DataSummary>("/data/summary").then(setSummary).catch(() => {});
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function upload(kind: string, file: File) {
+    const form = new FormData();
+    form.set("kind", kind);
+    form.set("file", file);
+    try {
+      const r = await api<{ rows: number }>("/data/csv", { method: "POST", body: form });
+      setMsg((m) => ({ ...m, [kind]: `${r.rows} rows added` }));
+      load();
+    } catch (e) {
+      setMsg((m) => ({ ...m, [kind]: (e as Error).message }));
+    }
+  }
+
+  return (
+    <Card>
+      <div id="data" className="scroll-mt-24" />
+      <CardTitle action={<Pill>Optional</Pill>}>Store data</CardTitle>
+      <p className="mb-4 text-sm text-muted">Upload CSV exports so the agent can prove delivery and fight disputes you can win.</p>
+      <ul className="divide-y divide-line">
+        {KINDS.map((k) => {
+          const s = summary.find((x) => x.kind === k.kind);
+          return (
+            <li key={k.kind} className="flex flex-wrap items-center justify-between gap-3 py-3">
+              <div className="min-w-0">
+                <div className="font-medium">{k.label}</div>
+                <div className="truncate font-mono text-[11px] text-muted" title={k.cols}>{msg[k.kind] ?? (s ? `${s.rows} rows · ${dateTime(s.last_import)}` : k.cols)}</div>
+              </div>
+              <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-line-strong px-3 py-1.5 text-sm font-semibold hover:bg-soft">
+                <input type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => e.target.files?.[0] && upload(k.kind, e.target.files[0])} />
+                <Icon name="upload" className="text-[18px]" /> Upload
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }

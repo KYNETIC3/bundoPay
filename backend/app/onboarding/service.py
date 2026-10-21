@@ -97,6 +97,42 @@ async def complete(
     return {"paypal_merchant_id": paypal_merchant_id, "granted_features": features}
 
 
+async def dev_connect_self(merchant_id: UUID) -> dict[str, Any]:
+    """Developer-only test mode: treat the partner app's own sandbox business account as this user's
+    connected merchant. Used while PayPal partner onboarding is not yet approved."""
+    settings = get_settings()
+    if not settings.paypal_dev_self_merchant:
+        raise OnboardingError("Developer test mode is turned off.")
+    own_id = settings.paypal_partner_merchant_id
+    if not own_id:
+        raise OnboardingError("PAYPAL_PARTNER_MERCHANT_ID is not set.")
+
+    scopes = await get_gateway().own_scopes()
+    features = sorted({f for s in scopes for frag, f in SCOPE_FEATURES.items() if frag in s})
+    missing = sorted(REQUIRED_FEATURES - set(features))
+    if missing:
+        raise OnboardingError(f"Your PayPal app is missing: {', '.join(missing)}. Enable Disputes on the app in the PayPal dashboard.")
+
+    async with connection() as conn:
+        cur = await conn.execute(
+            "select id from merchants where paypal_merchant_id = %s and id <> %s", (own_id, merchant_id)
+        )
+        if await cur.fetchone():
+            raise OnboardingError("Another BundoPay user is already using the test account. Disconnect it there first.")
+        await conn.execute(
+            """
+            update merchants set paypal_merchant_id = %s, grant_status = 'granted', granted_scopes = %s,
+              connected_at = now(), onboarding_tracking_id = null
+            where id = %s
+            """,
+            (own_id, jsonb(features), merchant_id),
+        )
+        await audit(conn, "onboarding.dev_self_connected", merchant_id=merchant_id,
+                    data={"paypal_merchant_id": own_id, "features": features})
+        await enqueue(conn, "sync_merchant", {"merchant_id": str(merchant_id)}, dedupe_key=f"sync:{merchant_id}")
+    return {"paypal_merchant_id": own_id, "granted_features": features, "test_mode": True}
+
+
 async def disconnect(merchant_id: UUID) -> None:
     async with connection() as conn:
         await conn.execute(

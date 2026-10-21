@@ -71,9 +71,20 @@ class PayPalGateway:
         self._token: str | None = None
         self._token_expires_at = 0.0
         self._token_lock = asyncio.Lock()
+        self._scopes: list[str] = []
 
     async def aclose(self) -> None:
         await self._http.aclose()
+
+    async def own_scopes(self) -> list[str]:
+        """Scope URIs PayPal granted the partner app for its own account."""
+        await self._access_token()
+        return list(self._scopes)
+
+    def _is_self(self, merchant_id: str) -> bool:
+        # The app's own business account is called with the partner token alone; an auth
+        # assertion is only for acting on behalf of a *different* merchant.
+        return merchant_id == self._settings.paypal_partner_merchant_id
 
     # ---------------------------------------------------------------- auth
 
@@ -94,6 +105,7 @@ class PayPalGateway:
                 raise PayPalError.from_response(resp.status_code, _json_or_text(resp))
             body = resp.json()
             self._token = body["access_token"]
+            self._scopes = body.get("scope", "").split()
             expires_in = int(body.get("expires_in", 3600))
             self._token_expires_at = time.monotonic() + max(expires_in - TOKEN_REFRESH_MARGIN_SECONDS, 0)
             return self._token
@@ -151,7 +163,7 @@ class PayPalGateway:
 
         async def send(token: str) -> httpx.Response:
             headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-            if merchant_id:
+            if merchant_id and not self._is_self(merchant_id):
                 headers["PayPal-Auth-Assertion"] = auth_assertion(self._settings.paypal_partner_client_id, merchant_id)
             if request_id:
                 headers["PayPal-Request-Id"] = request_id

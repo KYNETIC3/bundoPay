@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     paypal_partner_merchant_id: str = ""  # the partner's own payer ID, used in merchant-integrations lookups
     paypal_webhook_id: str = ""
     paypal_base_url: str = SANDBOX_BASE_URL
+    # Developer-only: let a signed-in user use the partner app's own business account as their merchant,
+    # for testing before PayPal approves partner onboarding. Never enable outside the sandbox.
+    paypal_dev_self_merchant: bool = False
 
     # Supabase.
     database_url: str = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
@@ -34,6 +37,7 @@ class Settings(BaseSettings):
     # Agent.
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.8-flash"
+    gemini_fallback_model: str = "gemini-3.5-flash-lite"  # used when the main model is busy or out of quota
 
     # App.
     frontend_url: str = "http://localhost:3000"

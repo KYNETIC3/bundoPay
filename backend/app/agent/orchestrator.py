@@ -25,7 +25,15 @@ from .assemble import assemble, payload_hash
 from .evidence import EvidenceMap, build_evidence_map, gather
 from .llm import LLM, GeminiLLM, parse_json_object
 from .prompts import SYSTEM_PROMPT
-from .recommend import DisallowedActionError, History, Recommendation, enforce_allowed, recommend
+from .recommend import (
+    DisallowedActionError,
+    History,
+    Recommendation,
+    RefundPolicy,
+    enforce_allowed,
+    policy_allows_auto_refund,
+    recommend,
+)
 from .tools import READ_ONLY_TOOLS, TOOL_SPECS, ToolBox
 
 log = logging.getLogger(__name__)
@@ -37,7 +45,7 @@ _ID_LIKE = re.compile(r"\b(?=[A-Za-z0-9\-_.]*\d)[A-Za-z0-9\-_.]{4,}\b")
 
 def default_llm() -> LLM | None:
     s = get_settings()
-    return GeminiLLM(s.gemini_api_key, s.gemini_model) if s.gemini_api_key else None
+    return GeminiLLM(s.gemini_api_key, s.gemini_model, s.gemini_fallback_model) if s.gemini_api_key else None
 
 
 def note_is_grounded(note: str, corpus: str) -> bool:
@@ -118,7 +126,7 @@ async def _history(conn, merchant_id: UUID, reason: str | None) -> History:
 async def run_agent(dispute_id: UUID, *, acknowledge_past_due: bool = False, llm: LLM | None = None) -> dict[str, Any]:
     async with connection() as conn:
         cur = await conn.execute(
-            "select d.*, m.paypal_merchant_id, m.grant_status from disputes d join merchants m on m.id = d.merchant_id "
+            "select d.*, m.paypal_merchant_id, m.grant_status, m.auto_refund_enabled, m.auto_refund_limit from disputes d join merchants m on m.id = d.merchant_id "
             "where d.id = %s",
             (dispute_id,),
         )
@@ -163,7 +171,8 @@ async def run_agent(dispute_id: UUID, *, acknowledge_past_due: bool = False, llm
 
     async with connection() as conn:
         history = await _history(conn, merchant_id, facts.reason)
-    rec = recommend(facts, emap, history)
+    policy = RefundPolicy(enabled=row["auto_refund_enabled"], limit=row["auto_refund_limit"])
+    rec = recommend(facts, emap, history, policy=policy)
     llm = llm if llm is not None else default_llm()
     if llm is not None:
         corpus = json.dumps({"raw": raw, "ctx": ctx.__dict__}, default=str)
@@ -214,5 +223,18 @@ async def run_agent(dispute_id: UUID, *, acknowledge_past_due: bool = False, llm
                 dispute_id=dispute_id,
                 data={"evidence_map_id": str(map_id), "draft_id": str(draft_id) if draft_id else None, "at": datetime.now(timezone.utc).isoformat()},
             )
-    # STOP: the merchant must approve. The agent cannot submit.
-    return {"status": "draft_ready" if spec else "no_action", "evidence_map_id": str(map_id), "draft_id": str(draft_id) if draft_id else None}
+    result = {"status": "draft_ready" if spec else "no_action", "evidence_map_id": str(map_id), "draft_id": str(draft_id) if draft_id else None}
+    if spec and policy_allows_auto_refund(policy, facts, spec.action):
+        # The merchant's own standing rule approves this refund; it goes through the same
+        # token-and-hash-checked submit path as a manual click.
+        from app.approvals.service import approve_by_policy
+
+        await event("agent.auto_refund_started", {"draft_id": str(draft_id), "amount": str(facts.amount), "limit": str(policy.limit)})
+        try:
+            submitted = await approve_by_policy(merchant_id, draft_id, policy)
+        except Exception as exc:
+            await event("agent.auto_refund_failed", {"draft_id": str(draft_id), "error": f"{type(exc).__name__}: {exc}"})
+            return result
+        return {**result, "status": "auto_refunded", "paypal_status": submitted.status_after}
+    # STOP: anything outside the merchant's rule waits for their approval. The agent cannot submit.
+    return result

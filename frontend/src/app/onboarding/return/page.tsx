@@ -4,12 +4,15 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 
+import { Icon } from "@/components/ui";
 import { api, json } from "@/lib/api";
 import { FEATURE_COPY } from "@/lib/format";
 
+type Result = { paypal_merchant_id: string; granted_features: string[] };
+
 function ReturnInner() {
   const params = useSearchParams();
-  const [result, setResult] = useState<{ paypal_merchant_id: string; granted_features: string[] } | null>(null);
+  const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState<string | null>(null);
   const sent = useRef(false);
 
@@ -19,69 +22,44 @@ function ReturnInner() {
     const trackingId = params.get("merchantId");
     const merchantIdInPayPal = params.get("merchantIdInPayPal");
     if (!trackingId || !merchantIdInPayPal) {
-      setError("PayPal didn't return the details needed to finish connecting.");
+      setError("PayPal didn't send back the details needed to finish.");
       return;
     }
-    api<{ paypal_merchant_id: string; granted_features: string[] }>(
-      "/onboarding/complete",
-      json({
-        tracking_id: trackingId,
-        merchant_id_in_paypal: merchantIdInPayPal,
-        permissions_granted: params.get("permissionsGranted") === "true",
-      }),
-    )
+    api<Result>("/onboarding/complete", json({
+      tracking_id: trackingId,
+      merchant_id_in_paypal: merchantIdInPayPal,
+      permissions_granted: params.get("permissionsGranted") === "true",
+    }))
       .then(setResult)
       .catch((e: Error) => setError(e.message));
   }, [params]);
 
-  if (error)
-    return (
-      <div className="narrow stack">
-        <p className="eyebrow">Step 2 of 2 · Not connected</p>
-        <h1>The connection didn&rsquo;t complete</h1>
-        <p className="notice gap">{error}</p>
-        <Link className="btn" href="/onboarding">
-          Try again
-        </Link>
-      </div>
-    );
-
-  if (!result)
-    return (
-      <div className="narrow">
-        <p className="eyebrow">Step 2 of 2</p>
-        <h1>Confirming your permissions with PayPal…</h1>
-      </div>
-    );
-
   return (
-    <div className="narrow stack">
-      <p className="eyebrow">Step 2 of 2 · Connected</p>
-      <h1>PayPal confirmed the connection</h1>
-      <p className="lede">
-        Merchant ID <span className="mono">{result.paypal_merchant_id}</span>. We checked with PayPal directly; these are
-        the permissions it reports as granted:
-      </p>
-      <ul className="permissions">
-        {result.granted_features.map((f) => (
-          <li key={f}>
-            <span className="tick">✓</span>
-            <div>
-              <h3>{FEATURE_COPY[f]?.title ?? f}</h3>
-              <p className="mono muted">{f}</p>
-            </div>
-          </li>
-        ))}
-      </ul>
-      <p className="muted">Your disputes are syncing now. That can take a minute.</p>
-      <div className="row-actions">
-        <Link className="btn primary" href="/disputes">
-          Go to disputes
-        </Link>
-        <Link className="btn" href="/data">
-          Add your order records
-        </Link>
-      </div>
+    <div className="mx-auto max-w-md rounded-2xl border border-line bg-card p-8 text-center shadow-sm">
+      {error ? (
+        <>
+          <Icon name="error" className="text-[44px] text-danger" />
+          <h1 className="mt-2 text-2xl font-bold">Not connected</h1>
+          <p className="mt-2 text-sm text-muted">{error}</p>
+          <Link href="/onboarding" className="mt-6 inline-flex rounded-lg border border-line-strong px-4 py-2 text-sm font-semibold hover:bg-soft">Try again</Link>
+        </>
+      ) : !result ? (
+        <>
+          <Icon name="progress_activity" className="animate-spin text-[36px] text-primary" />
+          <p className="mt-3 text-sm text-muted">Confirming with PayPal…</p>
+        </>
+      ) : (
+        <>
+          <Icon name="check_circle" className="text-[44px] text-primary" />
+          <h1 className="mt-2 text-2xl font-bold">PayPal connected</h1>
+          <ul className="mt-4 space-y-2 text-left text-sm">
+            {result.granted_features.map((f) => (
+              <li key={f} className="flex items-center gap-2"><Icon name="check" className="text-[18px] text-primary" />{FEATURE_COPY[f]?.title ?? f}</li>
+            ))}
+          </ul>
+          <Link href="/" className="mt-6 inline-flex rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-container">Go to overview</Link>
+        </>
+      )}
     </div>
   );
 }

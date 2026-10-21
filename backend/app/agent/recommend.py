@@ -54,7 +54,35 @@ def enforce_allowed(action: str | None, facts: DisputeFacts) -> str | None:
     return action
 
 
-def recommend(facts: DisputeFacts, emap: EvidenceMap, history: History, now: datetime | None = None) -> Recommendation:
+@dataclass
+class RefundPolicy:
+    """The merchant's standing instruction: refund disputes up to `limit` without asking."""
+
+    enabled: bool = False
+    limit: Decimal = Decimal("0")
+
+    def covers(self, facts: DisputeFacts) -> bool:
+        return self.enabled and facts.amount is not None and facts.amount <= self.limit
+
+
+def policy_allows_auto_refund(policy: RefundPolicy, facts: DisputeFacts, action: str | None, now: datetime | None = None) -> bool:
+    """Code-level gate for refunds sent without a click: only a full refund (accept_claim) that PayPal
+    currently offers, at or under the merchant's limit, before the deadline."""
+    return (
+        action == "accept_claim"
+        and "accept_claim" in facts.allowed_actions
+        and policy.covers(facts)
+        and not facts.is_past_due(now)
+    )
+
+
+def recommend(
+    facts: DisputeFacts,
+    emap: EvidenceMap,
+    history: History,
+    now: datetime | None = None,
+    policy: RefundPolicy | None = None,
+) -> Recommendation:
     now = now or datetime.now(timezone.utc)
     allowed = facts.allowed_actions
     hours = (facts.due_date - now).total_seconds() / 3600 if facts.due_date else None
@@ -92,6 +120,12 @@ def recommend(facts: DisputeFacts, emap: EvidenceMap, history: History, now: dat
 
     if strong and "provide_evidence" in allowed:
         return done("provide_evidence", "Records cover what PayPal asked for without conflicts.")
+
+    if policy is not None and policy.covers(facts) and "accept_claim" in allowed:
+        return done(
+            "accept_claim",
+            f"The amount is within your automatic refund limit ({facts.currency} {policy.limit}) and the case isn't clearly winnable.",
+        )
 
     if weak:
         small = facts.amount is not None and facts.amount <= SMALL_AMOUNT
