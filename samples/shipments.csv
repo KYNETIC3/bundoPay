@@ -1,0 +1,2 @@
+order_id,carrier,tracking_number,shipped_at,delivered_at,status,ship_to_line1,ship_to_postal_code,ship_to_country
+A1001,UPS,1Z999AA10123456784,2026-10-02,2026-10-05,delivered,1 Main St,95131,US
