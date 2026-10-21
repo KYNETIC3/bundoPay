@@ -10,6 +10,8 @@ from typing import Any
 from uuid import UUID
 
 from app import storage
+from app.agent.messages import compose_failed, compose_submitted, money
+from app.agent.messages import post as post_message
 from app.agent.recommend import RefundPolicy
 from app.agent.assemble import (
     NOTE_LIMIT,
@@ -22,7 +24,9 @@ from app.audit import audit
 from app.config import get_settings
 from app.db import connection, jsonb
 from app.deps import get_gateway, revocation_guard
+from app.disputes.model import REASON_LABELS
 from app.disputes.sync import upsert_dispute
+from app.paypal_gateway import PayPalError
 
 from .submit import ApprovalRecord, DraftRecord, SubmissionResult, submit_dispute_response
 from .tokens import ApprovalError, issue, token_hash
@@ -206,6 +210,10 @@ async def reject_draft(merchant_id: UUID, draft_id: UUID) -> None:
         await conn.execute("update drafts set status = 'rejected', updated_at = now() where id = %s", (draft_id,))
         await conn.execute("update approvals set revoked_at = now() where draft_id = %s and consumed_at is null", (draft_id,))
         await audit(conn, "draft.rejected", merchant_id=merchant_id, dispute_id=draft["dispute_id"], data={"draft_id": str(draft_id)})
+        await post_message(
+            conn, merchant_id, "Understood. I won't send anything for this dispute. Ask me if you want a different response.",
+            kind="declined", dispute_id=draft["dispute_id"], draft_id=draft_id,
+        )
 
 
 async def _approve_and_submit(
@@ -265,9 +273,33 @@ async def approve_and_submit(
     merchant_id: UUID, draft_id: UUID, *, payload_hash_seen: str, acknowledge_past_due: bool
 ) -> SubmissionResult:
     """The merchant's click. Mints a token only if what they saw is exactly what is stored."""
-    return await _approve_and_submit(
-        merchant_id, draft_id, source="merchant", payload_hash_seen=payload_hash_seen, acknowledge_past_due=acknowledge_past_due
+    try:
+        result = await _approve_and_submit(
+            merchant_id, draft_id, source="merchant", payload_hash_seen=payload_hash_seen, acknowledge_past_due=acknowledge_past_due
+        )
+    except (ApprovalError, PayPalError) as exc:
+        reason = str(exc) if isinstance(exc, ApprovalError) else (exc.message or exc.name)
+        await _tell_about_draft(merchant_id, draft_id, "failed", lambda label, _a, _m: compose_failed(label, reason.rstrip(".") + "."))
+        raise
+    await _tell_about_draft(
+        merchant_id, draft_id, "submitted", lambda label, action, amount: compose_submitted(label, action, amount, result.status_after)
     )
+    return result
+
+
+async def _tell_about_draft(merchant_id: UUID, draft_id: UUID, kind: str, compose) -> None:
+    async with connection() as conn:
+        cur = await conn.execute(
+            "select dr.action, d.id as dispute_id, d.reason, d.amount, d.currency from drafts dr "
+            "join disputes d on d.id = dr.dispute_id where dr.id = %s",
+            (draft_id,),
+        )
+        r = await cur.fetchone()
+        if not r:
+            return
+        label = f"“{REASON_LABELS.get(r['reason'] or '', r['reason'] or 'dispute')}”"
+        content = compose(label, r["action"], money(r["amount"], r["currency"]))
+        await post_message(conn, merchant_id, content, kind=kind, dispute_id=r["dispute_id"], draft_id=draft_id)
 
 
 async def approve_by_policy(merchant_id: UUID, draft_id: UUID, policy: RefundPolicy) -> SubmissionResult:

@@ -106,6 +106,17 @@ async def record_outcome(conn: AsyncConnection, dispute: dict[str, Any], outcome
         ),
     )
     if await cur.fetchone():
+        from app.agent.messages import compose_outcome, money
+        from app.agent.messages import post as post_message
+        from app.disputes.model import REASON_LABELS
+
+        await post_message(
+            conn,
+            dispute["merchant_id"],
+            compose_outcome(REASON_LABELS.get(dispute["reason"] or "", dispute["reason"]), money(dispute["amount"], dispute["currency"]), outcome_code),
+            kind="outcome",
+            dispute_id=dispute["id"],
+        )
         await audit(
             conn,
             "dispute.outcome_recorded",

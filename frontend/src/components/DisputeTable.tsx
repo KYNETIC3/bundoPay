@@ -1,15 +1,28 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 
+import { api } from "@/lib/api";
 import { money } from "@/lib/format";
 import { agentState, disputeStatus } from "@/lib/status";
 import type { DisputeSummary } from "@/lib/types";
 
 import { Countdown } from "./Countdown";
-import { Button, Pill } from "./ui";
+import { Button, Icon, Pill } from "./ui";
 
-export function DisputeTable({ items }: { items: DisputeSummary[] }) {
+export function DisputeTable({ items, onChanged }: { items: DisputeSummary[]; onChanged?: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  async function act(id: string, what: "clear" | "restore") {
+    setBusy(id);
+    try {
+      await api(`/disputes/${id}/${what}`, { method: "POST" });
+      onChanged?.();
+      window.dispatchEvent(new CustomEvent("disputes-synced"));
+    } finally {
+      setBusy(null);
+    }
+  }
   return (
     <div className="-mx-5 overflow-x-auto">
       <table className="w-full min-w-[640px] border-collapse text-left text-sm">
@@ -41,11 +54,22 @@ export function DisputeTable({ items }: { items: DisputeSummary[] }) {
                 <td className="px-3 py-3">{d.status === "RESOLVED" ? <span className="text-muted">—</span> : <Countdown due={d.due_date} />}</td>
                 <td className="px-3 py-3"><Pill tone={a.tone}>{a.label}</Pill></td>
                 <td className="px-5 py-3 text-right">
-                  {ready ? (
-                    <Button variant="primary" href={`/disputes/${d.id}/approve`} className="px-2.5 py-1 text-xs">Review</Button>
-                  ) : (
-                    <Button href={`/disputes/${d.id}`} className="px-2.5 py-1 text-xs">Open</Button>
-                  )}
+                  <div className="inline-flex items-center gap-1.5">
+                    {d.cleared ? (
+                      <Button onClick={() => act(d.id, "restore")} disabled={busy === d.id} className="px-2.5 py-1 text-xs">
+                        <Icon name="unarchive" className="text-[16px]" /> Restore
+                      </Button>
+                    ) : d.clearable ? (
+                      <Button onClick={() => act(d.id, "clear")} disabled={busy === d.id} className="px-2.5 py-1 text-xs">
+                        <Icon name="inventory_2" className="text-[16px]" /> Clear
+                      </Button>
+                    ) : null}
+                    {ready ? (
+                      <Button variant="primary" href={`/disputes/${d.id}/approve`} className="px-2.5 py-1 text-xs">Review</Button>
+                    ) : (
+                      <Button href={`/disputes/${d.id}`} variant="ghost" className="px-2.5 py-1 text-xs">Open</Button>
+                    )}
+                  </div>
                 </td>
               </tr>
             );

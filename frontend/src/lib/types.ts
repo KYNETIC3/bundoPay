@@ -12,6 +12,8 @@ export type DisputeSummary = {
   draft_id?: string | null;
   draft_action?: string | null;
   draft_status?: string | null;
+  clearable?: boolean;
+  cleared?: boolean;
 };
 
 export type EvidenceRow = {

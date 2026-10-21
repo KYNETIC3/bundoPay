@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { DisputeTable } from "@/components/DisputeTable";
 import { Button, Card, CardTitle, Empty, Icon } from "@/components/ui";
+import { api } from "@/lib/api";
 import { money } from "@/lib/format";
 import { useLive } from "@/lib/hooks";
 import type { DisputeSummary } from "@/lib/types";
@@ -24,7 +25,7 @@ type Overview = {
 type AgentSettings = { auto_refund_enabled: boolean; auto_refund_limit: string };
 
 export default function OverviewPage() {
-  const { data: o } = useLive<Overview>("/overview");
+  const { data: o, reload: reloadOverview } = useLive<Overview>("/overview");
   const { data: disputes, error: disputesError } = useLive<DisputeSummary[]>("/disputes");
   const { data: rules } = useLive<AgentSettings>("/agent/settings", 120_000);
   const open = (disputes ?? []).filter((d) => d.status !== "RESOLVED");
@@ -74,9 +75,22 @@ export default function OverviewPage() {
             )}
           </Card>
           <Card>
-            <CardTitle>Agent activity</CardTitle>
+            <CardTitle
+              action={
+                o?.activity.length ? (
+                  <button
+                    onClick={() => api("/overview/activity/clear", { method: "POST" }).then(reloadOverview).catch(() => {})}
+                    className="text-xs text-muted hover:text-ink"
+                  >
+                    Clear
+                  </button>
+                ) : undefined
+              }
+            >
+              Agent activity
+            </CardTitle>
             {!o?.activity.length ? (
-              <p className="text-sm text-muted">No activity yet.</p>
+              <p className="text-sm text-muted">Nothing new.</p>
             ) : (
               <ul className="divide-y divide-line">
                 {o.activity.slice(0, 6).map((a, i) => (
@@ -123,7 +137,7 @@ function AskCard() {
     <Card className="bg-ink text-white border-ink">
       <div className="flex items-center gap-2">
         <Icon name="forum" />
-        <span className="font-semibold">Ask the agent</span>
+        <span className="font-semibold">Talk to your agent</span>
       </div>
       <form
         className="mt-3 flex gap-2"

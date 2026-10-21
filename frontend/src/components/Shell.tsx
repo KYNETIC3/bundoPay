@@ -16,14 +16,14 @@ const BARE_PATHS = ["/login", "/onboarding", "/onboarding/return"];
 const NAV = [
   { href: "/", label: "Overview", icon: "dashboard" },
   { href: "/disputes", label: "Disputes", icon: "gavel" },
-  { href: "/agent", label: "Ask the agent", icon: "forum" },
+  { href: "/agent", label: "Agent", icon: "smart_toy" },
   { href: "/settings", label: "Settings", icon: "tune" },
 ];
 
 const TITLES: [string, string][] = [
   ["/disputes/", "Dispute"],
   ["/disputes", "Disputes"],
-  ["/agent", "Ask the agent"],
+  ["/agent", "Agent"],
   ["/settings", "Settings"],
   ["/", "Overview"],
 ];
@@ -60,6 +60,20 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
   const [syncing, setSyncing] = useState(false);
   const [reconnect, setReconnect] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    const check = () => api<{ count: number }>("/agent/unread").then((r) => setUnread(r.count)).catch(() => {});
+    check();
+    const t = setInterval(check, 20_000);
+    const onRead = () => setUnread(0);
+    window.addEventListener("agent-read", onRead);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("agent-read", onRead);
+    };
+  }, []);
   const title = TITLES.find(([p]) => (p === "/" ? pathname === "/" : pathname.startsWith(p)))?.[1] ?? "BundoPay";
   const connected = status?.grant_status === "granted";
 
@@ -72,10 +86,16 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
   async function sync() {
     setSyncing(true);
     setSyncError(null);
+    setSyncResult(null);
     try {
-      await api("/disputes/sync", { method: "POST" });
+      const r = await api<{ synced: number }>("/disputes/sync", { method: "POST" });
       await refresh();
       window.dispatchEvent(new CustomEvent("disputes-synced"));
+      setSyncResult(
+        r.synced === 0
+          ? `Synced with PayPal at ${new Date().toLocaleTimeString()}. PayPal has no disputes on merchant ${status?.paypal_merchant_id ?? ""}.`
+          : `Synced with PayPal at ${new Date().toLocaleTimeString()}: ${r.synced} dispute${r.synced === 1 ? "" : "s"} checked.`,
+      );
     } catch (e) {
       setSyncError((e as Error).message);
     } finally {
@@ -104,6 +124,11 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
               >
                 <Icon name={n.icon} />
                 <span className="hidden md:inline">{n.label}</span>
+                {n.href === "/agent" && unread > 0 && (
+                  <span className="ml-auto rounded-full bg-coral px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none text-white" aria-label={`${unread} new`}>
+                    {unread}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -153,6 +178,12 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
           <div className="flex items-center justify-between gap-3 rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm">
             <span>Sync failed: {syncError}</span>
             <button onClick={() => setSyncError(null)} className="font-semibold text-danger">Dismiss</button>
+          </div>
+        )}
+        {syncResult && (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-card px-4 py-3 text-sm">
+            <span className="flex items-center gap-2"><Icon name="check_circle" className="text-primary" />{syncResult}</span>
+            <button onClick={() => setSyncResult(null)} className="font-semibold text-muted">Dismiss</button>
           </div>
         )}
         {status && !connected && pathname !== "/settings" ? <ConnectPrompt /> : children}

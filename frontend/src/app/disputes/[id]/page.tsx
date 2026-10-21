@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { Countdown } from "@/components/Countdown";
@@ -25,6 +25,7 @@ const EVENT_LABELS: Record<string, string> = {
 
 export default function DisputePage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [d, setD] = useState<DisputeDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -50,6 +51,19 @@ export default function DisputePage() {
       if (r.status === "not_actionable") setMessage("PayPal isn't waiting on you for this one right now.");
       if (r.status === "auto_refunded") setMessage("Refunded automatically: it was within your refund limit.");
       await load();
+    } catch (e) {
+      setMessage((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setCleared(clear: boolean) {
+    setBusy(true);
+    try {
+      await api(`/disputes/${id}/${clear ? "clear" : "restore"}`, { method: "POST" });
+      if (clear) router.push("/disputes");
+      else await load();
     } catch (e) {
       setMessage((e as Error).message);
     } finally {
@@ -88,7 +102,18 @@ export default function DisputePage() {
                 {d.status !== "RESOLVED" && <Countdown due={d.due_date} />}
               </div>
             </div>
-            <div className="font-mono text-3xl font-bold tabular-nums">{money(d.amount, d.currency)}</div>
+            <div className="flex flex-col items-end gap-2">
+              <div className="font-mono text-3xl font-bold tabular-nums">{money(d.amount, d.currency)}</div>
+              {d.cleared ? (
+                <Button onClick={() => setCleared(false)} disabled={busy} className="px-2.5 py-1 text-xs">
+                  <Icon name="unarchive" className="text-[16px]" /> Restore
+                </Button>
+              ) : (d.status === "RESOLVED" || draft?.status === "submitted") ? (
+                <Button onClick={() => setCleared(true)} disabled={busy} className="px-2.5 py-1 text-xs">
+                  <Icon name="inventory_2" className="text-[16px]" /> Clear
+                </Button>
+              ) : null}
+            </div>
           </div>
         </Card>
 
@@ -181,7 +206,7 @@ export default function DisputePage() {
         <Card className="border-ink bg-ink text-white">
           <p className="font-semibold">Questions about this dispute?</p>
           <Button href={`/agent?q=${encodeURIComponent(`Tell me about dispute ${d.paypal_dispute_id}`)}`} className="mt-3 w-full border-white/20 bg-white/10 text-white hover:bg-white/20">
-            <Icon name="forum" className="text-[18px]" /> Ask the agent
+            <Icon name="smart_toy" className="text-[18px]" /> Ask the agent
           </Button>
         </Card>
         <Card>

@@ -41,6 +41,7 @@ def _summary(row: dict[str, Any]) -> dict[str, Any]:
         "currency": row["currency"],
         "due_date": row["due_date"],
         "updated_at": row["updated_at"],
+        "cleared": row.get("archived_at") is not None,
     }
 
 
@@ -53,7 +54,7 @@ async def _owned_dispute(conn, merchant_id: UUID, dispute_id: UUID) -> dict[str,
 
 
 @router.get("/disputes")
-async def inbox(merchant: CurrentMerchant = Depends(current_merchant)) -> list[dict[str, Any]]:
+async def inbox(cleared: bool = False, merchant: CurrentMerchant = Depends(current_merchant)) -> list[dict[str, Any]]:
     async with connection() as conn:
         cur = await conn.execute(
             """
@@ -61,15 +62,67 @@ async def inbox(merchant: CurrentMerchant = Depends(current_merchant)) -> list[d
             from disputes d
             left join lateral (select id, action, status from drafts where dispute_id = d.id
                                order by created_at desc limit 1) dr on true
-            where d.merchant_id = %s
+            where d.merchant_id = %s and (d.archived_at is not null) = %s
             order by (d.status = 'RESOLVED'), d.due_date asc nulls last, d.updated_at desc
+            """,
+            (merchant.id, cleared),
+        )
+        return [
+            {**_summary(r), "draft_id": r["draft_id"], "draft_action": r["draft_action"], "draft_status": r["draft_status"],
+             "clearable": _clearable(r["status"], r["draft_status"]), "cleared": r["archived_at"] is not None}
+            for r in await cur.fetchall()
+        ]
+
+
+def _clearable(status: str, draft_status: str | None) -> bool:
+    """Finished: PayPal closed it, or our response (e.g. a refund) has been sent."""
+    return status == "RESOLVED" or draft_status == "submitted"
+
+
+async def _latest_draft_status(conn, dispute_id: UUID) -> str | None:
+    cur = await conn.execute(
+        "select status from drafts where dispute_id = %s order by created_at desc limit 1", (dispute_id,)
+    )
+    row = await cur.fetchone()
+    return row["status"] if row else None
+
+
+@router.post("/disputes/{dispute_id}/clear")
+async def clear(dispute_id: UUID, merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, str]:
+    async with connection() as conn:
+        row = await _owned_dispute(conn, merchant.id, dispute_id)
+        if not _clearable(row["status"], await _latest_draft_status(conn, dispute_id)):
+            raise HTTPException(409, {"code": "not_finished", "message": "Only closed or refunded disputes can be cleared."})
+        await conn.execute("update disputes set archived_at = now() where id = %s", (dispute_id,))
+        await audit(conn, "dispute.cleared", merchant_id=merchant.id, dispute_id=dispute_id)
+    return {"status": "cleared"}
+
+
+@router.post("/disputes/{dispute_id}/restore")
+async def restore(dispute_id: UUID, merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, str]:
+    async with connection() as conn:
+        await _owned_dispute(conn, merchant.id, dispute_id)
+        await conn.execute("update disputes set archived_at = null where id = %s", (dispute_id,))
+        await audit(conn, "dispute.restored", merchant_id=merchant.id, dispute_id=dispute_id)
+    return {"status": "restored"}
+
+
+@router.post("/disputes/clear-finished")
+async def clear_finished(merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, int]:
+    async with connection() as conn:
+        cur = await conn.execute(
+            """
+            update disputes d set archived_at = now()
+            where d.merchant_id = %s and d.archived_at is null and (
+              d.status = 'RESOLVED' or
+              (select status from drafts where dispute_id = d.id order by created_at desc limit 1) = 'submitted')
+            returning d.id
             """,
             (merchant.id,),
         )
-        return [
-            {**_summary(r), "draft_id": r["draft_id"], "draft_action": r["draft_action"], "draft_status": r["draft_status"]}
-            for r in await cur.fetchall()
-        ]
+        n = len(await cur.fetchall())
+        await audit(conn, "dispute.cleared_finished", merchant_id=merchant.id, data={"count": n})
+    return {"cleared": n}
 
 
 @router.post("/disputes/sync")

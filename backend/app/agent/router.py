@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -13,6 +14,7 @@ from app.disputes.model import REASON_LABELS
 
 from .chat import chat
 from .llm import ModelUnavailableError
+from .messages import post as post_message
 from .orchestrator import default_llm
 
 router = APIRouter()
@@ -89,7 +91,7 @@ async def overview(merchant: CurrentMerchant = Depends(current_merchant)) -> dic
             """
             select a.event, a.created_at, a.data_json, d.id as dispute_id, d.reason, d.amount, d.currency
             from audit_log a left join disputes d on d.id = a.dispute_id
-            where a.merchant_id = %s and a.event = any(%s) order by a.id desc limit 12
+            where a.merchant_id = %s and a.event = any(%s) and a.created_at > coalesce((select activity_cleared_at from merchants where id = a.merchant_id), '-infinity') order by a.id desc limit 12
             """,
             (merchant.id, list(ACTIVITY)),
         )
@@ -108,13 +110,92 @@ async def overview(merchant: CurrentMerchant = Depends(current_merchant)) -> dic
     return {**kpis, **refunds, "activity": activity}
 
 
-class ChatMessage(BaseModel):
-    role: Literal["owner", "agent"]
-    content: str = Field(max_length=4000)
-
-
 class ChatBody(BaseModel):
-    messages: list[ChatMessage] = Field(min_length=1, max_length=40)
+    content: str = Field(min_length=1, max_length=4000)
+
+
+def _card(r: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "dispute_id": r["d_id"],
+        "paypal_dispute_id": r["paypal_dispute_id"],
+        "reason": REASON_LABELS.get(r["d_reason"] or "", r["d_reason"]),
+        "amount": r["d_amount"],
+        "currency": r["d_currency"],
+        "status": r["d_status"],
+        "archived": r["archived_at"] is not None,
+        "draft_id": r["dr_id"],
+        "action": r["dr_action"],
+        "draft_status": r["dr_status"],
+        "payload_hash": r["dr_hash"],
+        "offer_amount": r["dr_offer"],
+    }
+
+
+CARD_SQL = """
+    select d.id as d_id, d.paypal_dispute_id, d.reason as d_reason, d.amount as d_amount, d.currency as d_currency,
+           d.status as d_status, d.archived_at,
+           dr.id as dr_id, dr.action as dr_action, dr.status as dr_status, dr.payload_hash as dr_hash,
+           dr.payload_json->'offer_amount'->>'value' as dr_offer
+    from disputes d
+    left join drafts dr on dr.id = coalesce(%(draft_id)s,
+        (select id from drafts where dispute_id = d.id order by created_at desc limit 1))
+    where d.id = any(%(ids)s) and d.merchant_id = %(merchant)s
+"""
+
+
+@router.get("/agent/messages")
+async def agent_messages(merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, Any]:
+    """The conversation: the agent's own updates plus chat, oldest first, with live dispute/draft state."""
+    async with connection() as conn:
+        cur = await conn.execute(
+            "select * from (select * from agent_messages where merchant_id = %s and created_at > coalesce((select conversation_cleared_at from merchants where id = %s), '-infinity') "
+            "order by id desc limit 150) m order by id",
+            (merchant.id, merchant.id),
+        )
+        rows = await cur.fetchall()
+        out = []
+        for m in rows:
+            ids = [m["dispute_id"]] if m["dispute_id"] else [UUID(x) for x in (m["meta"] or {}).get("dispute_ids", [])]
+            cards = []
+            if ids:
+                c2 = await conn.execute(CARD_SQL, {"draft_id": m["draft_id"], "ids": ids, "merchant": merchant.id})
+                cards = [_card(r) for r in await c2.fetchall()]
+            out.append({"id": m["id"], "role": m["role"], "kind": m["kind"], "content": m["content"],
+                        "created_at": m["created_at"], "unread": m["read_at"] is None, "cards": cards})
+    return {"messages": out, "unread": sum(1 for m in out if m["unread"])}
+
+
+@router.get("/agent/unread")
+async def agent_unread(merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, int]:
+    async with connection() as conn:
+        cur = await conn.execute(
+            "select count(*) as n from agent_messages where merchant_id = %s and read_at is null", (merchant.id,)
+        )
+        return {"count": (await cur.fetchone())["n"]}
+
+
+@router.post("/overview/activity/clear")
+async def clear_activity(merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, str]:
+    """Hide older entries from the Overview's activity card. The audit log itself is never deleted."""
+    async with connection() as conn:
+        await conn.execute("update merchants set activity_cleared_at = now() where id = %s", (merchant.id,))
+    return {"status": "cleared"}
+
+
+@router.post("/agent/messages/clear")
+async def clear_conversation(merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, str]:
+    """Start a fresh conversation view. Earlier messages stay stored; they're just no longer shown."""
+    async with connection() as conn:
+        await conn.execute("update merchants set conversation_cleared_at = now() where id = %s", (merchant.id,))
+        await conn.execute("update agent_messages set read_at = now() where merchant_id = %s and read_at is null", (merchant.id,))
+    return {"status": "cleared"}
+
+
+@router.post("/agent/messages/read")
+async def mark_read(merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, str]:
+    async with connection() as conn:
+        await conn.execute("update agent_messages set read_at = now() where merchant_id = %s and read_at is null", (merchant.id,))
+    return {"status": "ok"}
 
 
 @router.post("/agent/chat")
@@ -123,10 +204,25 @@ async def agent_chat(body: ChatBody, merchant: CurrentMerchant = Depends(current
     if llm is None:
         raise HTTPException(503, {"code": "no_model", "message": "Agent chat needs GEMINI_API_KEY in backend/.env."})
     async with connection() as conn:
-        await audit(conn, "agent.chat", merchant_id=merchant.id, data={"question": body.messages[-1].content[:500]})
+        await post_message(conn, merchant.id, body.content, kind="chat", role="owner")
+        await audit(conn, "agent.chat", merchant_id=merchant.id, data={"question": body.content[:500]})
+        # The agent sees its own recent updates too, so "approve the one you just told me about" works.
+        cur = await conn.execute(
+            "select role, content from (select * from agent_messages where merchant_id = %s and created_at > coalesce((select conversation_cleared_at from merchants where id = %s), '-infinity') "
+            "order by id desc limit 12) m order by id",
+            (merchant.id, merchant.id),
+        )
+        history = [{"role": r["role"], "content": r["content"]} for r in await cur.fetchall()]
     try:
-        return await chat(merchant.id, [m.model_dump() for m in body.messages], llm)
+        reply = await chat(merchant.id, history, llm)
     except ModelUnavailableError as exc:
-        raise HTTPException(503, {"code": "model_busy", "message": str(exc)}) from exc
+        reply = {"reply": str(exc), "cards": []}
     except RuntimeError as exc:
-        raise HTTPException(502, {"code": "agent_error", "message": str(exc)}) from exc
+        reply = {"reply": f"Sorry, I couldn't finish that: {exc}", "cards": []}
+    async with connection() as conn:
+        await post_message(
+            conn, merchant.id, reply["reply"] or "Done.", kind="chat",
+            meta={"dispute_ids": [str(c["dispute_id"]) for c in reply["cards"]]},
+        )
+        await conn.execute("update agent_messages set read_at = now() where merchant_id = %s and read_at is null", (merchant.id,))
+    return {"status": "ok"}
