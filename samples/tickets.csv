@@ -1,0 +1,2 @@
+order_id,ticket_id,created_at,subject,summary,status
+A1001,T-501,2026-10-06,Where is my order?,Customer asked for tracking; tracking link sent same day.,closed

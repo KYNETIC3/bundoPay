@@ -1,0 +1,2 @@
+order_id,order_date,total,currency,paypal_transaction_id,customer_email,items,ship_to_name,ship_to_line1,ship_to_city,ship_to_postal_code,ship_to_country
+A1001,2026-10-01,120.00,USD,REPLACE_WITH_SANDBOX_TXN_ID,buyer@example.com,Walnut desk tray,Sam Buyer,1 Main St,San Jose,95131,US
