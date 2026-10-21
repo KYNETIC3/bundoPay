@@ -30,7 +30,7 @@ export default function LoginPage() {
       <p className="eyebrow">{mode === "signin" ? "Sign in" : "Create an account"}</p>
       <h1>Your disputes, prepared carefully. Sent only when you say so.</h1>
       <p className="lede">
-        Dispute Agent reads your PayPal disputes, gathers the records that answer them, and drafts a response for you to
+        BundoPay reads your PayPal disputes, gathers the records that answer them, and drafts a response for you to
         review. It never holds your PayPal password and never submits on its own.
       </p>
       <form onSubmit={submit} className="card stack" style={{ marginTop: 28 }}>
@@ -39,7 +39,7 @@ export default function LoginPage() {
           <input id="email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
         <div>
-          <label htmlFor="password">Password for Dispute Agent (not your PayPal password)</label>
+          <label htmlFor="password">Password for BundoPay (not your PayPal password)</label>
           <input
             id="password"
             type="password"

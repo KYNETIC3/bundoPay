@@ -31,7 +31,7 @@ class Settings(BaseSettings):
 
     # Agent.
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.8-flash"
 
     # App.
     frontend_url: str = "http://localhost:3000"
@@ -42,5 +42,5 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     settings = Settings()
     if settings.paypal_base_url != SANDBOX_BASE_URL:
-        raise RuntimeError("Dispute Agent is sandbox-only; PAYPAL_BASE_URL must be the sandbox host.")
+        raise RuntimeError("BundoPay is sandbox-only; PAYPAL_BASE_URL must be the sandbox host.")
     return settings

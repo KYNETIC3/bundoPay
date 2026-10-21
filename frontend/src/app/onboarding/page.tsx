@@ -29,7 +29,7 @@ export default function OnboardingPage() {
   return (
     <div className="narrow stack">
       <p className="eyebrow">Step 1 of 2 · Permissions</p>
-      <h1>What Dispute Agent will be able to do in your PayPal account</h1>
+      <h1>What BundoPay will be able to do in your PayPal account</h1>
       <p className="lede">
         You&rsquo;ll sign in on PayPal&rsquo;s own site and approve these permissions there. We receive only your PayPal
         merchant ID and confirmation of what you approved, never your password or API credentials.

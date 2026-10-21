@@ -41,7 +41,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     <div className="shell">
       <header className="masthead">
         <Link href="/disputes" className="wordmark">
-          Dispute Agent <span>· sandbox</span>
+          BundoPay <span>· sandbox</span>
         </Link>
         {session && (
           <nav className="nav">
@@ -56,7 +56,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </header>
       {reconnect && (
         <div className="notice gap" style={{ marginBottom: 24 }}>
-          PayPal no longer grants Dispute Agent access to your account.{" "}
+          PayPal no longer grants BundoPay access to your account.{" "}
           <Link href="/onboarding">Reconnect PayPal</Link> to keep working on your disputes.
         </div>
       )}

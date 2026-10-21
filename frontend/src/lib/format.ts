@@ -13,7 +13,7 @@ export const FEATURE_COPY: Record<string, { title: string; why: string }> = {
   },
   TRACKING_SHIPMENT_READWRITE: {
     title: "Read shipment tracking",
-    why: "To see whether a package was delivered. PayPal bundles read and write access here, but Dispute Agent never adds or changes tracking.",
+    why: "To see whether a package was delivered. PayPal bundles read and write access here, but BundoPay never adds or changes tracking.",
   },
   ACCESS_MERCHANT_INFORMATION: {
     title: "Confirm the connection",

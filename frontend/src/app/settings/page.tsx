@@ -82,8 +82,8 @@ export default function Settings() {
           confirming ? (
             <div className="notice stack">
               <p>
-                Dispute Agent will stop reading and responding to your disputes. To revoke the permission on PayPal&rsquo;s side
-                as well, remove Dispute Agent under <em>Account Settings → API access</em> in your PayPal account.
+                BundoPay will stop reading and responding to your disputes. To revoke the permission on PayPal&rsquo;s side
+                as well, remove BundoPay under <em>Account Settings → API access</em> in your PayPal account.
               </p>
               <div className="row-actions">
                 <button className="btn" onClick={disconnect}>

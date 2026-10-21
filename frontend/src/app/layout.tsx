@@ -10,7 +10,7 @@ const sans = IBM_Plex_Sans({ subsets: ["latin"], variable: "--font-sans", weight
 const mono = IBM_Plex_Mono({ subsets: ["latin"], variable: "--font-mono", weight: ["400"] });
 
 export const metadata: Metadata = {
-  title: "Dispute Agent",
+  title: "BundoPay",
   description: "Prepare PayPal dispute responses you approve before anything is sent.",
 };
 

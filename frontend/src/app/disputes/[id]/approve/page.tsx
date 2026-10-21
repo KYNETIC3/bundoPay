@@ -35,7 +35,7 @@ export default function ApprovePage() {
           <strong>{STATUS_LABELS[done.status_before] ?? done.status_before}</strong> to{" "}
           <strong>{STATUS_LABELS[done.status_after] ?? done.status_after}</strong> at {dateTime(done.confirmed_at)}.
         </p>
-        <p className="muted">Dispute Agent will keep following it until PayPal resolves it.</p>
+        <p className="muted">BundoPay will keep following it until PayPal resolves it.</p>
         <Link className="btn" href={`/disputes/${id}`}>
           Back to the dispute
         </Link>

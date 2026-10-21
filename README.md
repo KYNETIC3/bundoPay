@@ -1,6 +1,6 @@
-# Dispute Agent
+# BundoPay
 
-Dispute Agent lets a PayPal merchant connect their account. It prepares responses to their open disputes and sends nothing until the merchant approves the exact response. PayPal is the source of truth for dispute data, the permission layer and the action layer. **Sandbox only.**
+BundoPay lets a PayPal merchant connect their account. It prepares responses to their open disputes and sends nothing until the merchant approves the exact response. PayPal is the source of truth for dispute data, the permission layer and the action layer. **Sandbox only.**
 
 ```
 frontend/   Next.js (App Router) + TypeScript: onboarding, inbox, dispute detail, approval, records, settings

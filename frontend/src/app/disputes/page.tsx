@@ -48,7 +48,7 @@ export default function Inbox() {
         <p className="lede">
           {status.grant_status === "revoked"
             ? "PayPal reports that access was revoked. Reconnect to continue."
-            : "Dispute Agent works from your PayPal dispute data. Start by reviewing the permissions it needs."}
+            : "BundoPay works from your PayPal dispute data. Start by reviewing the permissions it needs."}
         </p>
         <Link href="/onboarding" className="btn primary">
           {status.grant_status === "revoked" ? "Reconnect PayPal" : "Review permissions"}

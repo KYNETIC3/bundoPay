@@ -100,7 +100,7 @@ export default function DisputePage() {
         <div className="notice gap stack" style={{ marginTop: 16 }}>
           <p>
             <strong>The seller response deadline passed on {dateTime(d.due_date)}.</strong> PayPal may no longer accept
-            a response to this dispute. Dispute Agent won&rsquo;t prepare or send anything unless you choose to continue.
+            a response to this dispute. BundoPay won&rsquo;t prepare or send anything unless you choose to continue.
           </p>
           {actionable && !emap && (
             <button className="btn" onClick={() => analyze(true)} disabled={busy}>

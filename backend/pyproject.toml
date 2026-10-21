@@ -1,7 +1,7 @@
 [project]
-name = "dispute-agent"
+name = "bundopay"
 version = "0.1.0"
-description = "Dispute Agent backend: PayPal dispute management with merchant-approved submissions"
+description = "BundoPay backend: PayPal dispute management with merchant-approved submissions"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",

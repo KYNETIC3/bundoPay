@@ -24,7 +24,7 @@ async def lifespan(_: FastAPI):
     await close_pool()
 
 
-app = FastAPI(title="Dispute Agent", lifespan=lifespan)
+app = FastAPI(title="BundoPay", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[get_settings().frontend_url],
@@ -37,7 +37,7 @@ app.add_middleware(
 async def revoked(_: Request, exc: PermissionRevokedError) -> JSONResponse:
     return JSONResponse(
         status_code=409,
-        content={"detail": {"code": "reconnect_required", "message": "PayPal no longer grants Dispute Agent access. Reconnect your account."}},
+        content={"detail": {"code": "reconnect_required", "message": "PayPal no longer grants BundoPay access. Reconnect your account."}},
     )
 
 
