@@ -20,7 +20,12 @@ export async function api<T = unknown>(path: string, init: RequestInit = {}): Pr
   if (data.session) headers.set("Authorization", `Bearer ${data.session.access_token}`);
   if (init.body && !(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
 
-  const res = await fetch(`${BASE}${path}`, { ...init, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, { ...init, headers });
+  } catch {
+    throw new ApiError(0, "network", "Can't reach the BundoPay server. Check that the API is running, then try again.");
+  }
   if (!res.ok) {
     let code = "error";
     let message = res.statusText;

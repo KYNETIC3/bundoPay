@@ -56,11 +56,20 @@ async def _owned_dispute(conn, merchant_id: UUID, dispute_id: UUID) -> dict[str,
 async def inbox(merchant: CurrentMerchant = Depends(current_merchant)) -> list[dict[str, Any]]:
     async with connection() as conn:
         cur = await conn.execute(
-            "select * from disputes where merchant_id = %s "
-            "order by (status = 'RESOLVED'), due_date asc nulls last, updated_at desc",
+            """
+            select d.*, dr.id as draft_id, dr.action as draft_action, dr.status as draft_status
+            from disputes d
+            left join lateral (select id, action, status from drafts where dispute_id = d.id
+                               order by created_at desc limit 1) dr on true
+            where d.merchant_id = %s
+            order by (d.status = 'RESOLVED'), d.due_date asc nulls last, d.updated_at desc
+            """,
             (merchant.id,),
         )
-        return [_summary(r) for r in await cur.fetchall()]
+        return [
+            {**_summary(r), "draft_id": r["draft_id"], "draft_action": r["draft_action"], "draft_status": r["draft_status"]}
+            for r in await cur.fetchall()
+        ]
 
 
 @router.post("/disputes/sync")

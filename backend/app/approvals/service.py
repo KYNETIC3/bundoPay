@@ -5,10 +5,12 @@ from __future__ import annotations
 import hashlib
 import re
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
 from app import storage
+from app.agent.recommend import RefundPolicy
 from app.agent.assemble import (
     NOTE_LIMIT,
     FileValidationError,
@@ -94,7 +96,7 @@ class PgSubmissionStore:
 
 async def _owned_draft(conn, merchant_id: UUID, draft_id: UUID) -> dict[str, Any]:
     cur = await conn.execute(
-        "select dr.*, d.paypal_dispute_id, d.due_date, d.merchant_id from drafts dr join disputes d on d.id = dr.dispute_id "
+        "select dr.*, d.paypal_dispute_id, d.due_date, d.merchant_id, d.amount from drafts dr join disputes d on d.id = dr.dispute_id "
         "where dr.id = %s and d.merchant_id = %s",
         (draft_id, merchant_id),
     )
@@ -206,10 +208,16 @@ async def reject_draft(merchant_id: UUID, draft_id: UUID) -> None:
         await audit(conn, "draft.rejected", merchant_id=merchant_id, dispute_id=draft["dispute_id"], data={"draft_id": str(draft_id)})
 
 
-async def approve_and_submit(
-    merchant_id: UUID, draft_id: UUID, *, payload_hash_seen: str, acknowledge_past_due: bool
+async def _approve_and_submit(
+    merchant_id: UUID,
+    draft_id: UUID,
+    *,
+    source: str,
+    payload_hash_seen: str | None,
+    acknowledge_past_due: bool,
+    allowed_actions: tuple[str, ...] | None = None,
+    max_amount: Decimal | None = None,
 ) -> SubmissionResult:
-    """The merchant's click. Mints a token only if what they saw is exactly what is stored."""
     settings = get_settings()
     async with connection() as conn:
         async with conn.transaction():
@@ -218,8 +226,12 @@ async def approve_and_submit(
                 raise DraftError("not_approvable", f"Draft is {draft['status']}", 409)
             if draft["due_date"] and draft["due_date"] < datetime.now(timezone.utc) and not acknowledge_past_due:
                 raise DraftError("past_due", "The response deadline has passed. Confirm you want to submit anyway.", 409)
+            if allowed_actions is not None and draft["action"] not in allowed_actions:
+                raise DraftError("not_covered", f"Your rule doesn't cover '{draft['action']}'", 409)
+            if max_amount is not None and (draft["amount"] is None or draft["amount"] > max_amount):
+                raise DraftError("not_covered", "The amount is above your automatic refund limit", 409)
             current = payload_hash(draft["paypal_dispute_id"], draft["action"], draft["payload_json"], draft["files"])
-            if current != draft["payload_hash"] or current != payload_hash_seen:
+            if current != draft["payload_hash"] or (payload_hash_seen is not None and current != payload_hash_seen):
                 raise DraftError("stale_view", "This draft changed since you opened it. Review it again before approving.", 409)
             token, claims = issue(
                 settings.approval_signing_key,
@@ -229,12 +241,13 @@ async def approve_and_submit(
                 ttl_seconds=settings.approval_token_ttl_seconds,
             )
             await conn.execute(
-                "insert into approvals (draft_id, merchant_id, token_hash, payload_hash, expires_at) values (%s, %s, %s, %s, %s)",
-                (draft_id, merchant_id, token_hash(token), current, datetime.fromtimestamp(claims.expires_at, timezone.utc)),
+                "insert into approvals (draft_id, merchant_id, token_hash, payload_hash, expires_at, source) "
+                "values (%s, %s, %s, %s, %s, %s)",
+                (draft_id, merchant_id, token_hash(token), current, datetime.fromtimestamp(claims.expires_at, timezone.utc), source),
             )
             await conn.execute("update drafts set status = 'approved', updated_at = now() where id = %s", (draft_id,))
             await audit(conn, "draft.approved", merchant_id=merchant_id, dispute_id=draft["dispute_id"],
-                        data={"draft_id": str(draft_id), "payload_hash": current, "expires_at": claims.expires_at})
+                        data={"draft_id": str(draft_id), "payload_hash": current, "expires_at": claims.expires_at, "source": source})
 
     store = PgSubmissionStore()
     try:
@@ -246,3 +259,28 @@ async def approve_and_submit(
         # Nothing reached PayPal; let the merchant review and approve again.
         await store.set_draft_status(str(draft_id), "failed")
         raise
+
+
+async def approve_and_submit(
+    merchant_id: UUID, draft_id: UUID, *, payload_hash_seen: str, acknowledge_past_due: bool
+) -> SubmissionResult:
+    """The merchant's click. Mints a token only if what they saw is exactly what is stored."""
+    return await _approve_and_submit(
+        merchant_id, draft_id, source="merchant", payload_hash_seen=payload_hash_seen, acknowledge_past_due=acknowledge_past_due
+    )
+
+
+async def approve_by_policy(merchant_id: UUID, draft_id: UUID, policy: RefundPolicy) -> SubmissionResult:
+    """The merchant's standing auto-refund rule approves a full refund within their limit. Re-checks the
+    rule against the stored draft, never past the deadline, and uses the same token/hash-checked submit."""
+    if not policy.enabled:
+        raise DraftError("not_covered", "Automatic refunds are off", 409)
+    return await _approve_and_submit(
+        merchant_id,
+        draft_id,
+        source="policy",
+        payload_hash_seen=None,
+        acknowledge_past_due=False,
+        allowed_actions=("accept_claim",),
+        max_amount=policy.limit,
+    )

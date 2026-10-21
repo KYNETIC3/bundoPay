@@ -4,11 +4,19 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { Button, Card, Icon, Pill } from "@/components/ui";
 import { api, json } from "@/lib/api";
-import { ACTION_LABELS, STATUS_LABELS, dateTime, humanize, money } from "@/lib/format";
+import { dateTime, humanize, money } from "@/lib/format";
+import { disputeStatus } from "@/lib/status";
 import type { DisputeDetail, Draft } from "@/lib/types";
 
 type Confirmation = { status_before: string; status_after: string; confirmed_at: string };
+
+const HEADLINE: Record<Draft["action"], (amount: string, offer?: string) => string> = {
+  accept_claim: (amount) => `Refund ${amount} to the buyer`,
+  make_offer: (_amount, offer) => `Offer the buyer ${offer}`,
+  provide_evidence: () => "Send your proof to PayPal",
+};
 
 export default function ApprovePage() {
   const { id } = useParams<{ id: string }>();
@@ -25,34 +33,32 @@ export default function ApprovePage() {
     load().catch((e) => setError(e.message));
   }, [load]);
 
-  if (done)
+  if (done) {
+    const after = disputeStatus(done.status_after);
     return (
-      <div className="document stack">
-        <p className="eyebrow">Submitted</p>
-        <h1>PayPal received your response</h1>
-        <p className="lede">
-          We re-checked with PayPal after sending. The dispute moved from{" "}
-          <strong>{STATUS_LABELS[done.status_before] ?? done.status_before}</strong> to{" "}
-          <strong>{STATUS_LABELS[done.status_after] ?? done.status_after}</strong> at {dateTime(done.confirmed_at)}.
-        </p>
-        <p className="muted">BundoPay will keep following it until PayPal resolves it.</p>
-        <Link className="btn" href={`/disputes/${id}`}>
-          Back to the dispute
-        </Link>
-      </div>
+      <Card className="mx-auto max-w-lg text-center">
+        <Icon name="check_circle" className="text-[44px] text-primary" />
+        <h2 className="mt-2 text-2xl font-bold">Sent to PayPal</h2>
+        <p className="mt-2 text-sm text-muted">PayPal now shows this dispute as</p>
+        <div className="mt-2"><Pill tone={after.tone}>{after.label}</Pill></div>
+        <Button href={`/disputes/${id}`} className="mt-6">Back to dispute</Button>
+      </Card>
     );
+  }
 
-  if (!d) return error ? <p className="error">{error}</p> : null;
+  if (!d) return error ? <p className="text-sm text-danger">{error}</p> : null;
   const draft = d.draft;
   if (!draft || !["awaiting_approval", "failed"].includes(draft.status))
     return (
-      <div className="narrow stack">
-        <p className="muted">There&rsquo;s no draft awaiting your approval for this dispute.</p>
-        <Link className="btn" href={`/disputes/${id}`}>
-          Back to the dispute
-        </Link>
-      </div>
+      <Card className="mx-auto max-w-lg text-center">
+        <p className="text-muted">Nothing is waiting for your approval on this dispute.</p>
+        <Button href={`/disputes/${id}`} className="mt-4">Back to dispute</Button>
+      </Card>
     );
+
+  const p = draft.payload_json;
+  const amount = money(d.amount, d.currency);
+  const offer = draft.action === "make_offer" ? money(p.offer_amount?.value, p.offer_amount?.currency_code) : undefined;
 
   async function run(fn: () => Promise<void>) {
     setBusy(true);
@@ -65,268 +71,152 @@ export default function ApprovePage() {
       setBusy(false);
     }
   }
-
-  const approve = () =>
-    run(async () => {
-      const r = await api<Confirmation>(
-        `/drafts/${draft.id}/approve`,
-        json({ payload_hash: draft.payload_hash, acknowledge_past_due: ackLate }),
-      );
-      setDone(r);
-    });
-
-  const saveEdits = () =>
+  const approve = () => run(async () => setDone(await api<Confirmation>(`/drafts/${draft.id}/approve`, json({ payload_hash: draft.payload_hash, acknowledge_past_due: ackLate }))));
+  const save = () =>
     run(async () => {
       await api(`/drafts/${draft.id}`, { method: "PUT", body: JSON.stringify({ payload: editing }) });
       setEditing(null);
-      setNotice("Edits saved. This is a new version: review it and approve again.");
+      setNotice("Saved. Check it once more, then approve.");
       await load();
     });
-
-  const reject = () =>
-    run(async () => {
-      await api(`/drafts/${draft.id}/reject`, { method: "POST" });
-      await load();
-    });
-
-  const upload = (evidenceType: string, file: File) =>
+  const reject = () => run(async () => { await api(`/drafts/${draft.id}/reject`, { method: "POST" }); await load(); });
+  const upload = (type: string, file: File) =>
     run(async () => {
       const form = new FormData();
-      form.set("evidence_type", evidenceType);
+      form.set("evidence_type", type);
       form.set("file", file);
       await api(`/drafts/${draft.id}/files`, { method: "POST", body: form });
-      setNotice("File attached. The response changed, so review it again before approving.");
+      setNotice("File added. Check it once more, then approve.");
       await load();
     });
-
-  const removeFile = (sha: string) =>
-    run(async () => {
-      await api(`/drafts/${draft.id}/files/${sha}`, { method: "DELETE" });
-      await load();
-    });
+  const removeFile = (sha: string) => run(async () => { await api(`/drafts/${draft.id}/files/${sha}`, { method: "DELETE" }); await load(); });
 
   return (
-    <div className="document">
-      <header>
-        <p className="eyebrow">For your signature · {ACTION_LABELS[draft.action]}</p>
-        <h1>Response to PayPal dispute {d.paypal_dispute_id}</h1>
-        <dl>
-          <dt>Dispute</dt>
-          <dd>{d.reason_label}</dd>
-          <dt>Amount</dt>
-          <dd>{money(d.amount, d.currency)}</dd>
-          <dt>Respond by</dt>
-          <dd className={d.past_due ? "gapnote" : undefined}>
-            {dateTime(d.due_date)}
-            {d.past_due && " (passed)"}
-          </dd>
-          <dt>Sent to</dt>
-          <dd>PayPal, on your behalf, only if you approve</dd>
-        </dl>
-      </header>
+    <div className="mx-auto max-w-2xl space-y-5">
+      <Link href={`/disputes/${id}`} className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
+        <Icon name="arrow_back" className="text-[18px]" /> {d.reason_label}
+      </Link>
 
-      {notice && <p className="notice" style={{ marginBottom: 16 }}>{notice}</p>}
-
-      {editing ? (
-        <EditForm draft={draft} value={editing} onChange={setEditing} />
-      ) : (
-        <Body draft={draft} onUpload={upload} onRemoveFile={removeFile} busy={busy} />
-      )}
-
-      {draft.missing_items.length > 0 && (
-        <div className="missing">
-          <strong>Not included, because no matching record exists or it conflicts:</strong>
-          <ul>
-            {draft.missing_items.map((m, i) => (
-              <li key={i}>
-                {m.evidence_type && <>{humanize(m.evidence_type)}: </>}
-                {m.detail}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <details className="payload">
-        <summary>Exact request PayPal will receive</summary>
-        <pre>
-          {`POST /v1/customer/disputes/${d.paypal_dispute_id}/${draft.action.replace("_", "-")}\n\n`}
-          {draft.action === "provide_evidence" ? "input = " : ""}
-          {JSON.stringify(draft.payload_json, null, 2)}
-          {draft.files.map((f) => `\n\nevidence-file = ${f.filename} (${f.content_type}, ${f.size} bytes, sha256 ${f.sha256})`).join("")}
-        </pre>
-      </details>
-
-      <div className="signature">
-        {editing ? (
-          <div className="row-actions">
-            <button className="btn primary" onClick={saveEdits} disabled={busy}>
-              Save edits
-            </button>
-            <button className="btn quiet" onClick={() => setEditing(null)} disabled={busy}>
-              Discard edits
-            </button>
-            <span className="muted" style={{ fontSize: "0.85rem" }}>
-              Saving creates a new version that you&rsquo;ll need to approve again.
-            </span>
-          </div>
-        ) : (
-          <>
-            <p className="line">
-              I have read this response. Submit it to PayPal, exactly as shown, on my behalf.
-            </p>
-            {d.past_due && (
-              <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 14 }}>
-                <input type="checkbox" checked={ackLate} onChange={(e) => setAckLate(e.target.checked)} style={{ width: "auto", marginTop: 4 }} />
-                I understand the deadline has passed and PayPal may not accept this response.
-              </label>
-            )}
-            <div className="row-actions">
-              <button className="btn primary" onClick={approve} disabled={busy || (d.past_due && !ackLate)}>
-                {busy ? "Submitting…" : "Approve and submit"}
-              </button>
-              <button className="btn" onClick={() => setEditing(structuredClone(draft.payload_json))} disabled={busy}>
-                Edit
-              </button>
-              <button className="btn quiet" onClick={reject} disabled={busy}>
-                Reject
-              </button>
-            </div>
-            <p className="fingerprint" style={{ marginTop: 16 }}>
-              Version fingerprint {draft.payload_hash}
-            </p>
-          </>
-        )}
-        {error && <p className="error" style={{ marginTop: 12 }}>{error}</p>}
-      </div>
-    </div>
-  );
-}
-
-function Body({
-  draft,
-  onUpload,
-  onRemoveFile,
-  busy,
-}: {
-  draft: Draft;
-  onUpload: (type: string, f: File) => void;
-  onRemoveFile: (sha: string) => void;
-  busy: boolean;
-}) {
-  const p = draft.payload_json;
-  if (draft.action === "make_offer")
-    return (
-      <div className="clause">
-        <p>
-          Offer the buyer a refund of <strong>{money(p.offer_amount.value, p.offer_amount.currency_code)}</strong> to resolve
-          the dispute.
+      <Card className="p-6 sm:p-8">
+        <p className="text-xs font-bold uppercase tracking-wider text-muted">Your approval</p>
+        <h2 className="mt-1 text-3xl font-bold tracking-tight">{HEADLINE[draft.action](amount, offer)}</h2>
+        <p className="mt-2 text-sm text-muted">
+          Dispute <span className="font-mono">{d.paypal_dispute_id}</span> · respond by {dateTime(d.due_date)}
         </p>
-        <blockquote>{p.note}</blockquote>
-      </div>
-    );
-  if (draft.action === "accept_claim")
-    return (
-      <div className="clause">
-        <p>Accept the buyer&rsquo;s claim. PayPal will refund the buyer.</p>
-        <blockquote>{p.note}</blockquote>
-      </div>
-    );
-  return (
-    <div>
-      {(p.evidences as any[]).map((e, i) => {
-        const files = draft.files.filter((f) => f.evidence_type === e.evidence_type);
-        return (
-          <div className="clause" key={e.evidence_type}>
-            <h3>
-              <span className="num">{i + 1}.</span>
-              {humanize(e.evidence_type)}
-            </h3>
-            {e.evidence_info?.tracking_info?.map((t: any) => (
-              <p key={t.tracking_number} className="muted">
-                Tracking <span className="mono">{t.tracking_number}</span> · {t.carrier_name_other ?? t.carrier_name}
-              </p>
-            ))}
-            {e.evidence_info?.refund_ids?.length > 0 && (
-              <p className="muted">
-                PayPal refund <span className="mono">{e.evidence_info.refund_ids.join(", ")}</span>
-              </p>
-            )}
-            <blockquote>{e.notes}</blockquote>
-            <ul className="files">
-              {files.map((f) => (
-                <li key={f.sha256}>
-                  <span>
-                    📎 {f.filename} <span className="muted">({Math.ceil(f.size / 1024)} KB)</span>
-                  </span>
-                  <button className="btn quiet" onClick={() => onRemoveFile(f.sha256)} disabled={busy}>
-                    Remove
-                  </button>
-                </li>
-              ))}
+
+        {notice && <p className="mt-4 rounded-lg bg-primary-fixed/50 px-3 py-2 text-sm">{notice}</p>}
+
+        <div className="mt-6 space-y-3">
+          {editing ? (
+            <EditForm draft={draft} value={editing} onChange={setEditing} />
+          ) : draft.action === "provide_evidence" ? (
+            (p.evidences as any[]).map((e) => (
+              <div key={e.evidence_type} className="rounded-xl border border-line p-4">
+                <div className="font-semibold">{humanize(e.evidence_type)}</div>
+                {e.evidence_info?.tracking_info?.map((t: any) => (
+                  <div key={t.tracking_number} className="mt-1 font-mono text-xs text-muted">
+                    {t.carrier_name_other ?? t.carrier_name} · {t.tracking_number}
+                  </div>
+                ))}
+                <p className="mt-2 text-sm text-ink-2">{e.notes}</p>
+                {draft.files.filter((f) => f.evidence_type === e.evidence_type).map((f) => (
+                  <div key={f.sha256} className="mt-2 flex items-center justify-between text-sm">
+                    <span className="flex items-center gap-1"><Icon name="attach_file" className="text-[16px]" />{f.filename}</span>
+                    <button className="text-xs text-danger" onClick={() => removeFile(f.sha256)} disabled={busy}>Remove</button>
+                  </div>
+                ))}
+                <label className="mt-2 inline-flex cursor-pointer items-center gap-1 text-xs font-semibold text-primary">
+                  <input type="file" className="hidden" accept="application/pdf,image/jpeg,image/png,image/gif" disabled={busy}
+                    onChange={(ev) => ev.target.files?.[0] && upload(e.evidence_type, ev.target.files[0])} />
+                  <Icon name="add" className="text-[16px]" /> Add a file
+                </label>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-xl border border-line p-4">
+              <div className="text-xs font-bold uppercase tracking-wider text-muted">Note to PayPal</div>
+              <p className="mt-1 text-sm">{p.note}</p>
+            </div>
+          )}
+        </div>
+
+        {draft.missing_items.length > 0 && !editing && (
+          <details className="mt-4 rounded-xl bg-danger-soft px-4 py-3 text-sm">
+            <summary className="cursor-pointer font-semibold text-danger">{draft.missing_items.length} thing(s) we couldn&rsquo;t find</summary>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {draft.missing_items.map((m, i) => <li key={i}>{m.evidence_type && `${humanize(m.evidence_type)}: `}{m.detail}</li>)}
             </ul>
-            <label className="muted" style={{ marginTop: 8, cursor: "pointer" }}>
-              <input
-                type="file"
-                accept="application/pdf,image/jpeg,image/png,image/gif"
-                style={{ display: "none" }}
-                disabled={busy}
-                onChange={(ev) => ev.target.files?.[0] && onUpload(e.evidence_type, ev.target.files[0])}
-              />
-              + Attach a document (PDF, JPG, PNG or GIF, up to 10 MB)
-            </label>
-          </div>
-        );
-      })}
+          </details>
+        )}
+
+        <details className="mt-4 text-sm">
+          <summary className="cursor-pointer text-muted">Show exactly what PayPal receives</summary>
+          <pre className="mt-2 overflow-x-auto rounded-lg border border-line bg-soft p-3 font-mono text-[11px] leading-relaxed">
+            {JSON.stringify(p, null, 2)}
+          </pre>
+        </details>
+
+        {d.past_due && !editing && (
+          <label className="mt-5 flex items-start gap-2 text-sm">
+            <input type="checkbox" checked={ackLate} onChange={(e) => setAckLate(e.target.checked)} className="mt-1" />
+            The deadline has passed. Send anyway.
+          </label>
+        )}
+
+        <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-line pt-5">
+          {editing ? (
+            <>
+              <Button variant="primary" onClick={save} disabled={busy}>Save changes</Button>
+              <Button variant="ghost" onClick={() => setEditing(null)} disabled={busy}>Cancel</Button>
+            </>
+          ) : (
+            <>
+              <Button variant="primary" onClick={approve} disabled={busy || (d.past_due && !ackLate)}>
+                <Icon name="check" className="text-[18px]" /> {busy ? "Sending" : "Approve"}
+              </Button>
+              <Button onClick={() => setEditing(structuredClone(p))} disabled={busy}>Edit</Button>
+              <Button variant="ghost" onClick={reject} disabled={busy} className="text-danger">Decline</Button>
+            </>
+          )}
+        </div>
+        {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      </Card>
     </div>
   );
 }
 
 function EditForm({ draft, value, onChange }: { draft: Draft; value: Record<string, any>; onChange: (v: Record<string, any>) => void }) {
+  const field = "w-full rounded-lg border border-line-strong px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-container";
   if (draft.action !== "provide_evidence")
     return (
-      <div className="stack clause">
+      <div className="space-y-3">
         {draft.action === "make_offer" && (
-          <div>
-            <label>Offer amount ({value.offer_amount.currency_code})</label>
-            <input
-              inputMode="decimal"
-              value={value.offer_amount.value}
-              onChange={(e) => onChange({ ...value, offer_amount: { ...value.offer_amount, value: e.target.value } })}
-            />
-          </div>
+          <label className="block text-sm">
+            <span className="mb-1 block text-muted">Offer amount ({value.offer_amount.currency_code})</span>
+            <input inputMode="decimal" className={field} value={value.offer_amount.value}
+              onChange={(e) => onChange({ ...value, offer_amount: { ...value.offer_amount, value: e.target.value } })} />
+          </label>
         )}
-        <div>
-          <label>Note to PayPal ({value.note.length}/499)</label>
-          <textarea maxLength={499} value={value.note} onChange={(e) => onChange({ ...value, note: e.target.value })} />
-        </div>
+        <label className="block text-sm">
+          <span className="mb-1 block text-muted">Note to PayPal</span>
+          <textarea maxLength={499} rows={3} className={field} value={value.note} onChange={(e) => onChange({ ...value, note: e.target.value })} />
+        </label>
       </div>
     );
   const items = value.evidences as any[];
   return (
-    <div>
+    <div className="space-y-3">
       {items.map((e, i) => (
-        <div className="clause stack" key={e.evidence_type}>
-          <div className="section-head" style={{ marginBottom: 0 }}>
-            <h3>{humanize(e.evidence_type)}</h3>
-            <button
-              className="btn quiet"
-              onClick={() => onChange({ evidences: items.filter((_, j) => j !== i) })}
-              disabled={items.length === 1}
-            >
-              Remove item
-            </button>
-          </div>
-          <div>
-            <label>Note ({e.notes.length}/499). Keep it factual.</label>
-            <textarea
-              maxLength={499}
-              value={e.notes}
-              onChange={(ev) => onChange({ evidences: items.map((x, j) => (j === i ? { ...x, notes: ev.target.value } : x)) })}
-            />
-          </div>
-          {e.evidence_info && <p className="muted" style={{ fontSize: "0.85rem" }}>Tracking and refund details come from your records and can&rsquo;t be edited here.</p>}
-        </div>
+        <label key={e.evidence_type} className="block text-sm">
+          <span className="mb-1 flex items-center justify-between text-muted">
+            {humanize(e.evidence_type)}
+            {items.length > 1 && (
+              <button type="button" className="text-xs text-danger" onClick={() => onChange({ evidences: items.filter((_, j) => j !== i) })}>Remove</button>
+            )}
+          </span>
+          <textarea maxLength={499} rows={3} className={field} value={e.notes}
+            onChange={(ev) => onChange({ evidences: items.map((x, j) => (j === i ? { ...x, notes: ev.target.value } : x)) })} />
+        </label>
       ))}
     </div>
   );

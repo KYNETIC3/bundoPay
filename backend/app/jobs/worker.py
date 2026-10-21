@@ -9,6 +9,7 @@ import asyncio
 import logging
 from uuid import UUID
 
+import psycopg
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.agent.orchestrator import run_agent
@@ -43,26 +44,38 @@ async def enqueue_polls() -> None:
             await enqueue(conn, "sync_merchant", {"merchant_id": str(m["id"])}, dedupe_key=f"sync:{m['id']}")
 
 
-async def drain_forever(idle_sleep: float = 2.0) -> None:
+async def drain_forever(idle_sleep: float = 2.0, max_backoff: float = 60.0) -> None:
+    backoff = idle_sleep
     while True:
-        async with connection() as conn:
-            job = await claim(conn)
-        if job is None:
-            await asyncio.sleep(idle_sleep)
-            continue
         try:
-            await handle(job)
-        except PermissionRevokedError:
-            log.warning("Job %s: merchant grant revoked; not retrying", job["id"])
-            async with connection() as conn:
-                await complete(conn, job["id"])
-        except Exception as exc:
-            log.exception("Job %s (%s) failed", job["id"], job["kind"])
-            async with connection() as conn:
-                await fail(conn, job, f"{type(exc).__name__}: {exc}")
-        else:
-            async with connection() as conn:
-                await complete(conn, job["id"])
+            await _drain_one(idle_sleep)
+            backoff = idle_sleep
+        except psycopg.OperationalError as exc:
+            # A dropped connection or database blip shouldn't kill the worker; wait and retry.
+            log.warning("Database unavailable (%s); retrying in %.0fs", str(exc).strip().splitlines()[0], backoff)
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, max_backoff)
+
+
+async def _drain_one(idle_sleep: float) -> None:
+    async with connection() as conn:
+        job = await claim(conn)
+    if job is None:
+        await asyncio.sleep(idle_sleep)
+        return
+    try:
+        await handle(job)
+    except PermissionRevokedError:
+        log.warning("Job %s: merchant grant revoked; not retrying", job["id"])
+        async with connection() as conn:
+            await complete(conn, job["id"])
+    except Exception as exc:
+        log.exception("Job %s (%s) failed", job["id"], job["kind"])
+        async with connection() as conn:
+            await fail(conn, job, f"{type(exc).__name__}: {exc}")
+    else:
+        async with connection() as conn:
+            await complete(conn, job["id"])
 
 
 async def main() -> None:

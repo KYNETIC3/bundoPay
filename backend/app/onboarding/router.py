@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.auth import CurrentMerchant, current_merchant
+from app.config import get_settings
 from app.db import connection
 from app.paypal_gateway import THIRD_PARTY_FEATURES
 
@@ -18,7 +19,18 @@ class CompleteBody(BaseModel):
 
 @router.get("/permissions")
 async def requested_permissions() -> dict:
-    return {"features": THIRD_PARTY_FEATURES}
+    return {"features": THIRD_PARTY_FEATURES, "dev_test_mode": get_settings().paypal_dev_self_merchant}
+
+
+@router.post("/dev-connect")
+async def dev_connect(merchant: CurrentMerchant = Depends(current_merchant)) -> dict:
+    """Developer-only: use the app's own sandbox business account (see PAYPAL_DEV_SELF_MERCHANT)."""
+    if not get_settings().paypal_dev_self_merchant:
+        raise HTTPException(404, "Not found")
+    try:
+        return await service.dev_connect_self(merchant.id)
+    except service.OnboardingError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @router.post("/start")
@@ -50,7 +62,9 @@ async def status(merchant: CurrentMerchant = Depends(current_merchant)) -> dict:
             "from merchants where id = %s",
             (merchant.id,),
         )
-        return await cur.fetchone()
+        row = await cur.fetchone()
+    own_id = get_settings().paypal_partner_merchant_id
+    return {**row, "test_mode": bool(own_id) and row["paypal_merchant_id"] == own_id}
 
 
 @router.post("/disconnect")

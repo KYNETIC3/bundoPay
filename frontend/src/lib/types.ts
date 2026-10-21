@@ -9,6 +9,9 @@ export type DisputeSummary = {
   currency: string | null;
   due_date: string | null;
   updated_at: string;
+  draft_id?: string | null;
+  draft_action?: string | null;
+  draft_status?: string | null;
 };
 
 export type EvidenceRow = {

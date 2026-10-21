@@ -8,9 +8,10 @@ from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.db import close_pool, open_pool
 from app.deps import close_gateway
+from app.agent.router import router as agent_router
 from app.disputes.router import router as disputes_router
 from app.onboarding.router import router as onboarding_router
-from app.paypal_gateway import PermissionRevokedError, TransientPayPalError
+from app.paypal_gateway import PayPalError, PermissionRevokedError, TransientPayPalError
 from app.webhooks.router import router as webhooks_router
 
 logging.basicConfig(level=logging.INFO)
@@ -49,6 +50,19 @@ async def transient(_: Request, exc: TransientPayPalError) -> JSONResponse:
     )
 
 
+@app.exception_handler(PayPalError)
+async def paypal_error(_: Request, exc: PayPalError) -> JSONResponse:
+    # Handled here (inside the CORS middleware) so the browser sees PayPal's message, not "Failed to fetch".
+    if exc.status == 403 and exc.name == "NOT_AUTHORIZED":
+        message = "PayPal hasn't given this app permission for that action. " + (exc.message or "")
+    else:
+        message = f"PayPal returned an error: {exc.message or exc.name}"
+    return JSONResponse(
+        status_code=502,
+        content={"detail": {"code": "paypal_error", "paypal_name": exc.name, "message": message.strip(), "debug_id": exc.debug_id}},
+    )
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -57,3 +71,4 @@ async def health() -> dict[str, str]:
 app.include_router(onboarding_router)
 app.include_router(disputes_router)
 app.include_router(webhooks_router)
+app.include_router(agent_router)

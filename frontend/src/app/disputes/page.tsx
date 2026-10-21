@@ -1,116 +1,53 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
-import { Countdown } from "@/components/Countdown";
-import { api, ApiError } from "@/lib/api";
-import { STAGE_LABELS, STATUS_LABELS, money } from "@/lib/format";
+import { DisputeTable } from "@/components/DisputeTable";
+import { Card, Empty } from "@/components/ui";
+import { useLive } from "@/lib/hooks";
 import type { DisputeSummary } from "@/lib/types";
 
-type Status = { grant_status: string; last_synced_at: string | null };
+const FILTERS: { key: string; label: string; test: (d: DisputeSummary) => boolean; on: string; off: string }[] = [
+  { key: "all", label: "All", test: () => true, on: "bg-ink text-white", off: "border border-line-strong bg-card" },
+  { key: "you", label: "Needs you", test: (d) => d.status === "WAITING_FOR_SELLER_RESPONSE", on: "bg-coral text-white", off: "border-2 border-coral bg-card" },
+  { key: "ready", label: "Ready to approve", test: (d) => d.draft_status === "awaiting_approval" && d.status !== "RESOLVED", on: "bg-plum text-white", off: "border-2 border-plum bg-card" },
+  { key: "paypal", label: "With PayPal / buyer", test: (d) => ["UNDER_REVIEW", "WAITING_FOR_BUYER_RESPONSE", "OPEN"].includes(d.status), on: "bg-steel text-white", off: "border-2 border-steel bg-card" },
+  { key: "closed", label: "Closed", test: (d) => d.status === "RESOLVED", on: "bg-muted text-white", off: "border border-line-strong bg-card" },
+];
 
-export default function Inbox() {
-  const [items, setItems] = useState<DisputeSummary[] | null>(null);
-  const [status, setStatus] = useState<Status | null>(null);
-  const [syncing, setSyncing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    const [s, d] = await Promise.all([api<Status>("/onboarding/status"), api<DisputeSummary[]>("/disputes")]);
-    setStatus(s);
-    setItems(d);
-  }, []);
-
-  useEffect(() => {
-    load().catch((e) => setError(e.message));
-    const id = setInterval(() => load().catch(() => {}), 30_000);
-    return () => clearInterval(id);
-  }, [load]);
-
-  async function syncNow() {
-    setSyncing(true);
-    setError(null);
-    try {
-      await api("/disputes/sync", { method: "POST" });
-      await load();
-    } catch (e) {
-      if (!(e instanceof ApiError && e.code === "reconnect_required")) setError((e as Error).message);
-    } finally {
-      setSyncing(false);
-    }
-  }
-
-  if (status && status.grant_status !== "granted") {
-    return (
-      <div className="narrow stack">
-        <h1>Connect PayPal to see your disputes</h1>
-        <p className="lede">
-          {status.grant_status === "revoked"
-            ? "PayPal reports that access was revoked. Reconnect to continue."
-            : "BundoPay works from your PayPal dispute data. Start by reviewing the permissions it needs."}
-        </p>
-        <Link href="/onboarding" className="btn primary">
-          {status.grant_status === "revoked" ? "Reconnect PayPal" : "Review permissions"}
-        </Link>
-      </div>
-    );
-  }
-
-  const open = items?.filter((d) => d.status !== "RESOLVED") ?? [];
-  const resolved = items?.filter((d) => d.status === "RESOLVED") ?? [];
+export default function DisputesPage() {
+  const { data, error } = useLive<DisputeSummary[]>("/disputes");
+  const [filter, setFilter] = useState("all");
+  const active = FILTERS.find((f) => f.key === filter)!;
+  const items = (data ?? []).filter(active.test);
 
   return (
-    <div>
-      <div className="section-head" style={{ borderBottom: 0 }}>
-        <div>
-          <p className="eyebrow">Inbox · soonest deadline first</p>
-          <h1>Disputes</h1>
-        </div>
-        <div className="row-actions">
-          <span className="muted" style={{ fontSize: "0.85rem" }}>
-            {status?.last_synced_at ? `Synced ${new Date(status.last_synced_at).toLocaleTimeString()}` : "Not synced yet"}
-          </span>
-          <button className="btn" onClick={syncNow} disabled={syncing}>
-            {syncing ? "Syncing…" : "Sync with PayPal"}
-          </button>
-        </div>
+    <Card>
+      <div role="tablist" aria-label="Filter disputes" className="mb-4 flex flex-wrap gap-2">
+        {FILTERS.map((f) => {
+          const count = (data ?? []).filter(f.test).length;
+          const on = f.key === filter;
+          return (
+            <button
+              key={f.key}
+              role="tab"
+              aria-selected={on}
+              onClick={() => setFilter(f.key)}
+              className={`rounded-full px-4 py-1 text-xs font-bold tracking-wide transition active:scale-95 ${on ? f.on : f.off}`}
+            >
+              {f.label} ({count})
+            </button>
+          );
+        })}
       </div>
-      {error && <p className="error">{error}</p>}
-      {items && items.length === 0 && <p className="muted">No disputes on this PayPal account.</p>}
-      <ul className="inbox">
-        {open.map((d) => (
-          <Row key={d.id} d={d} />
-        ))}
-      </ul>
-      {resolved.length > 0 && (
-        <div className="section">
-          <div className="section-head">
-            <h2>Resolved</h2>
-          </div>
-          <ul className="inbox">
-            {resolved.map((d) => (
-              <Row key={d.id} d={d} />
-            ))}
-          </ul>
-        </div>
+      {error && <p className="text-sm text-danger">{error}</p>}
+      {data && items.length === 0 ? (
+        <Empty icon="inbox" title={filter === "all" ? "No disputes yet" : "Nothing here"}>
+          {filter === "all" && "When a buyer opens a dispute on PayPal, it appears here within 15 minutes, or right away if you press Sync."}
+        </Empty>
+      ) : (
+        data && <DisputeTable items={items} />
       )}
-    </div>
-  );
-}
-
-function Row({ d }: { d: DisputeSummary }) {
-  return (
-    <li className={d.status === "RESOLVED" ? "resolved" : undefined}>
-      <Link href={`/disputes/${d.id}`}>
-        <span className="reason">{d.reason_label ?? "Dispute"}</span>
-        <span className="amount">{money(d.amount, d.currency)}</span>
-        <span className="meta">
-          {STATUS_LABELS[d.status] ?? d.status} · {STAGE_LABELS[d.lifecycle_stage ?? ""] ?? d.lifecycle_stage} ·{" "}
-          <span className="mono">{d.paypal_dispute_id}</span>
-        </span>
-        {d.status === "RESOLVED" ? <span className="countdown">Closed</span> : <Countdown due={d.due_date} />}
-      </Link>
-    </li>
+    </Card>
   );
 }

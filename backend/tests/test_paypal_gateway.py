@@ -189,3 +189,11 @@ async def test_webhook_verification(gateway, paypal):
     # Missing headers never reach PayPal.
     assert await gateway.verify_webhook_signature({}, {"id": "WH-EVT"}) is False
     assert route.call_count == 1
+
+
+async def test_app_own_account_is_called_without_auth_assertion(gateway, paypal):
+    route = paypal.get("/v1/customer/disputes/PP-D-1").mock(return_value=httpx.Response(200, json={"dispute_id": "PP-D-1"}))
+    await gateway.get_dispute("PARTNERPAYERID", "PP-D-1")  # the partner's own merchant ID (dev test mode)
+    assert "PayPal-Auth-Assertion" not in route.calls.last.request.headers
+    await gateway.get_dispute("OTHERMERCHANT", "PP-D-1")
+    assert "PayPal-Auth-Assertion" in route.calls.last.request.headers

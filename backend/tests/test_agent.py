@@ -1,5 +1,6 @@
 import itertools
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 import pytest
 
@@ -246,3 +247,41 @@ def test_csv_validation():
         parse_csv("orders", "order_id,total\nA1,10\n")
     with pytest.raises(CsvValidationError, match="Row 2"):
         parse_csv("refunds", "order_id,refund_id,amount,currency\nA1,,10,USD\n")
+
+
+# ------------------------------------------------------- merchant refund limit
+
+from app.agent.recommend import RefundPolicy, policy_allows_auto_refund  # noqa: E402
+
+
+def test_refund_limit_recommends_refund_for_small_unwinnable_cases():
+    facts = parse_dispute(dispute(amount="15.00"))
+    emap = build_evidence_map(facts, Context(transaction_id="TXN1"))
+    policy = RefundPolicy(enabled=True, limit=Decimal("20"))
+    rec_ = recommend(facts, emap, History(), now=NOW, policy=policy)
+    assert rec_.action == "accept_claim"
+    assert policy_allows_auto_refund(policy, facts, rec_.action, now=NOW)
+
+
+def test_refund_limit_never_overrides_a_winnable_case():
+    facts = parse_dispute(dispute(amount="15.00"))
+    rec_ = recommend(facts, build_evidence_map(facts, strong_ctx()), History(), now=NOW,
+                     policy=RefundPolicy(enabled=True, limit=Decimal("20")))
+    assert rec_.action == "provide_evidence"
+
+
+@pytest.mark.parametrize(
+    "policy,amount,links,due_offset,action,expected",
+    [
+        (RefundPolicy(True, Decimal("20")), "20.00", ACTIONS, timedelta(days=1), "accept_claim", True),  # at the limit
+        (RefundPolicy(True, Decimal("20")), "20.01", ACTIONS, timedelta(days=1), "accept_claim", False),  # over
+        (RefundPolicy(False, Decimal("20")), "5.00", ACTIONS, timedelta(days=1), "accept_claim", False),  # rule off
+        (RefundPolicy(True, Decimal("20")), "5.00", ["provide_evidence"], timedelta(days=1), "accept_claim", False),  # no link
+        (RefundPolicy(True, Decimal("20")), "5.00", ACTIONS, -timedelta(hours=1), "accept_claim", False),  # past due
+        (RefundPolicy(True, Decimal("20")), "5.00", ACTIONS, timedelta(days=1), "make_offer", False),  # only full refunds
+        (RefundPolicy(True, Decimal("20")), "5.00", ACTIONS, timedelta(days=1), "provide_evidence", False),
+    ],
+)
+def test_auto_refund_gate(policy, amount, links, due_offset, action, expected):
+    facts = parse_dispute(dispute(links=links, amount=amount, due=NOW + due_offset))
+    assert policy_allows_auto_refund(policy, facts, action, now=NOW) is expected
