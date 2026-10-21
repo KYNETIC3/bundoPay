@@ -19,11 +19,12 @@ async def open_pool() -> AsyncConnectionPool:
     if _pool is None:
         _pool = AsyncConnectionPool(
             get_settings().database_url,
-            kwargs={"row_factory": dict_row},
-            min_size=1,
+            # TCP keepalives stop the pooler/network from silently dropping idle connections. This replaces
+            # a per-checkout liveness check, which cost a ~0.5s round trip to the hosted database every time.
+            kwargs={"row_factory": dict_row, "keepalives": 1, "keepalives_idle": 30, "keepalives_interval": 10, "keepalives_count": 3},
+            min_size=2,  # one warm connection for the request in flight, one for the next
             max_size=5,  # API + worker stay under the Supabase session-pooler limit
             max_idle=120,  # recycle idle connections before the pooler or network drops them
-            check=AsyncConnectionPool.check_connection,  # never hand out a dead connection
             open=False,
         )
         await _pool.open()

@@ -17,7 +17,7 @@ from app.db import connection
 from app.paypal_gateway import PayPalError
 
 from .model import REASON_LABELS, parse_dispute
-from .sync import sync_merchant
+from .sync import sync_quick
 
 router = APIRouter()
 
@@ -127,7 +127,8 @@ async def clear_finished(merchant: CurrentMerchant = Depends(current_merchant)) 
 
 @router.post("/disputes/sync")
 async def sync_now(merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, int]:
-    return {"synced": await sync_merchant(merchant.id)}
+    result = await sync_quick(merchant.id)
+    return {"synced": result["updated"], **result}
 
 
 @router.get("/disputes/{dispute_id}")

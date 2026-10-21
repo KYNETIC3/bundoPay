@@ -88,13 +88,16 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
     setSyncError(null);
     setSyncResult(null);
     try {
-      const r = await api<{ synced: number }>("/disputes/sync", { method: "POST" });
+      const r = await api<{ updated: number; total: number }>("/disputes/sync", { method: "POST" });
       await refresh();
       window.dispatchEvent(new CustomEvent("disputes-synced"));
+      const at = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
       setSyncResult(
-        r.synced === 0
-          ? `Synced with PayPal at ${new Date().toLocaleTimeString()}. PayPal has no disputes on merchant ${status?.paypal_merchant_id ?? ""}.`
-          : `Synced with PayPal at ${new Date().toLocaleTimeString()}: ${r.synced} dispute${r.synced === 1 ? "" : "s"} checked.`,
+        r.updated > 0
+          ? `Synced at ${at}: ${r.updated} dispute${r.updated === 1 ? "" : "s"} updated from PayPal.`
+          : r.total > 0
+            ? `Synced at ${at}: everything is up to date.`
+            : `Synced at ${at}: PayPal has no disputes on this account.`,
       );
     } catch (e) {
       setSyncError((e as Error).message);
