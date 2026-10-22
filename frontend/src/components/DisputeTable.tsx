@@ -11,40 +11,40 @@ import { Button, Pill } from "./ui";
 
 export function DisputeTable({ items }: { items: DisputeSummary[] }) {
   return (
-    <div className="-mx-5 overflow-x-auto">
-      <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+    <div className="-mx-7 overflow-x-auto">
+      <table className="w-full min-w-[680px] border-collapse text-left text-sm">
         <thead>
-          <tr className="border-y border-line bg-soft text-[11px] font-bold uppercase tracking-wider text-ink-2">
-            <th className="px-5 py-2.5">Dispute</th>
-            <th className="px-3 py-2.5 text-right">Amount</th>
-            <th className="px-3 py-2.5">Status</th>
-            <th className="px-3 py-2.5">Deadline</th>
-            <th className="px-3 py-2.5">Agent</th>
-            <th className="px-5 py-2.5 text-right" aria-label="Action" />
+          <tr className="text-[13px] font-medium text-muted">
+            <th className="px-7 pb-3 font-medium">Dispute</th>
+            <th className="px-4 pb-3 text-right font-medium">Amount</th>
+            <th className="px-4 pb-3 font-medium">Status</th>
+            <th className="px-4 pb-3 font-medium">Deadline</th>
+            <th className="px-4 pb-3 font-medium">Agent</th>
+            <th className="px-7 pb-3 text-right" aria-label="Action" />
           </tr>
         </thead>
-        <tbody className="divide-y divide-line">
+        <tbody>
           {items.map((d) => {
             const s = disputeStatus(d.status);
             const a = agentState({ status: d.status, draft_status: d.draft_status ?? null, draft_action: d.draft_action ?? null });
             const ready = d.draft_status === "awaiting_approval" && d.status !== "RESOLVED";
             return (
-              <tr key={d.id} className="transition-colors hover:bg-cream">
-                <td className="px-5 py-3">
-                  <Link href={`/disputes/${d.id}`} className="font-medium hover:underline">
+              <tr key={d.id} className="border-t border-ink/[0.06] transition-colors hover:bg-[#f8fbfc]">
+                <td className="px-7 py-4">
+                  <Link href={`/disputes/${d.id}`} className="font-semibold text-ink hover:text-primary">
                     {d.reason_label ?? "Dispute"}
                   </Link>
-                  <div className="font-mono text-[11px] text-muted">{d.paypal_dispute_id}</div>
+                  <div className="mt-1 text-xs text-muted">{d.paypal_dispute_id}</div>
                 </td>
-                <td className="px-3 py-3 text-right font-mono font-semibold tabular-nums">{money(d.amount, d.currency)}</td>
-                <td className="px-3 py-3"><Pill tone={s.tone}>{s.label}</Pill></td>
-                <td className="px-3 py-3">{d.status === "RESOLVED" ? <span className="text-muted">—</span> : <Countdown due={d.due_date} />}</td>
-                <td className="px-3 py-3"><Pill tone={a.tone}>{a.label}</Pill></td>
-                <td className="px-5 py-3 text-right">
+                <td className="px-4 py-4 text-right font-semibold tabular-nums">{money(d.amount, d.currency)}</td>
+                <td className="px-4 py-4"><Pill tone={s.tone}>{s.label}</Pill></td>
+                <td className="px-4 py-4">{d.status === "RESOLVED" ? <span className="text-muted">—</span> : <Countdown due={d.due_date} />}</td>
+                <td className="px-4 py-4"><Pill tone={a.tone}>{a.label}</Pill></td>
+                <td className="px-7 py-4 text-right">
                   {ready ? (
-                    <Button variant="primary" href={`/disputes/${d.id}/approve`} className="px-2.5 py-1 text-xs">Review</Button>
+                    <Button variant="primary" href={`/disputes/${d.id}/approve`} className="min-h-8 px-3.5 text-[13px]">Review</Button>
                   ) : (
-                    <Button href={`/disputes/${d.id}`} className="px-2.5 py-1 text-xs">Open</Button>
+                    <Button href={`/disputes/${d.id}`} className="min-h-8 px-3.5 text-[13px]">Open</Button>
                   )}
                 </td>
               </tr>

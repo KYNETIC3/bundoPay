@@ -7,12 +7,12 @@ import { Card, Empty } from "@/components/ui";
 import { useLive } from "@/lib/hooks";
 import type { DisputeSummary } from "@/lib/types";
 
-const FILTERS: { key: string; label: string; test: (d: DisputeSummary) => boolean; on: string; off: string }[] = [
-  { key: "all", label: "All", test: () => true, on: "bg-ink text-white", off: "border border-line-strong bg-card" },
-  { key: "you", label: "Needs you", test: (d) => d.status === "WAITING_FOR_SELLER_RESPONSE", on: "bg-coral text-white", off: "border-2 border-coral bg-card" },
-  { key: "ready", label: "Ready to approve", test: (d) => d.draft_status === "awaiting_approval" && d.status !== "RESOLVED", on: "bg-plum text-white", off: "border-2 border-plum bg-card" },
-  { key: "paypal", label: "With PayPal / buyer", test: (d) => ["UNDER_REVIEW", "WAITING_FOR_BUYER_RESPONSE", "OPEN"].includes(d.status), on: "bg-steel text-white", off: "border-2 border-steel bg-card" },
-  { key: "closed", label: "Closed", test: (d) => d.status === "RESOLVED", on: "bg-muted text-white", off: "border border-line-strong bg-card" },
+const FILTERS: { key: string; label: string; test: (d: DisputeSummary) => boolean }[] = [
+  { key: "all", label: "All", test: () => true },
+  { key: "you", label: "Needs you", test: (d) => d.status === "WAITING_FOR_SELLER_RESPONSE" },
+  { key: "ready", label: "Ready to approve", test: (d) => d.draft_status === "awaiting_approval" && d.status !== "RESOLVED" },
+  { key: "paypal", label: "With PayPal or buyer", test: (d) => ["UNDER_REVIEW", "WAITING_FOR_BUYER_RESPONSE", "OPEN"].includes(d.status) },
+  { key: "closed", label: "Closed", test: (d) => d.status === "RESOLVED" },
 ];
 
 export default function DisputesPage() {
@@ -23,7 +23,7 @@ export default function DisputesPage() {
 
   return (
     <Card>
-      <div role="tablist" aria-label="Filter disputes" className="mb-4 flex flex-wrap gap-2">
+      <div role="tablist" aria-label="Filter disputes" className="mb-6 inline-flex flex-wrap gap-1 rounded-full bg-soft p-1">
         {FILTERS.map((f) => {
           const count = (data ?? []).filter(f.test).length;
           const on = f.key === filter;
@@ -33,9 +33,9 @@ export default function DisputesPage() {
               role="tab"
               aria-selected={on}
               onClick={() => setFilter(f.key)}
-              className={`rounded-full px-4 py-1 text-xs font-bold tracking-wide transition active:scale-95 ${on ? f.on : f.off}`}
+              className={`inline-flex min-h-[34px] items-center gap-2 rounded-full px-4 text-[13px] transition ${on ? "bg-card font-semibold text-ink shadow-[0_1px_3px_rgb(54_33_62/0.1)]" : "font-medium text-ink-2 hover:text-ink"}`}
             >
-              {f.label} ({count})
+              {f.label}<span className="text-xs text-muted tabular-nums">{count}</span>
             </button>
           );
         })}

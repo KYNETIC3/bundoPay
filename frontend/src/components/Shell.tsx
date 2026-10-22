@@ -20,12 +20,12 @@ const NAV = [
   { href: "/settings", label: "Settings", icon: "tune" },
 ];
 
-const TITLES: [string, string][] = [
-  ["/disputes/", "Dispute"],
-  ["/disputes", "Disputes"],
-  ["/agent", "Ask the agent"],
-  ["/settings", "Settings"],
-  ["/", "Overview"],
+const TITLES: [string, string, string][] = [
+  ["/disputes/", "", ""],
+  ["/disputes", "Disputes", "Everything PayPal has sent you, newest first."],
+  ["/agent", "Ask the agent", "The agent can explain cases and prepare refunds. You approve before money moves."],
+  ["/settings", "Settings", "Your PayPal connection, what the agent may do alone, and the store data it can use."],
+  ["/", "Overview", "What needs you, and what the agent has done."],
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -45,7 +45,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }, [session, pathname, router]);
 
   if (session === undefined) return null;
-  if (bare) return <div className="min-h-screen px-4 py-10 sm:py-16">{children}</div>;
+  if (bare) return <div className="min-h-screen px-4 py-12 sm:py-20">{children}</div>;
   if (!session) return null;
 
   return (
@@ -60,7 +60,13 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
   const [syncing, setSyncing] = useState(false);
   const [reconnect, setReconnect] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
-  const title = TITLES.find(([p]) => (p === "/" ? pathname === "/" : pathname.startsWith(p)))?.[1] ?? "BundoPay";
+  const [, title, subtitle] = TITLES.find(([p]) => (p === "/" ? pathname === "/" : pathname.startsWith(p))) ?? ["", "BundoPay", ""];
+  // Dispute pages carry their own heading; the header only offers a way back.
+  const back = pathname.endsWith("/approve")
+    ? { href: pathname.slice(0, -"/approve".length), label: "Dispute" }
+    : pathname.startsWith("/disputes/")
+      ? { href: "/disputes", label: "Disputes" }
+      : null;
   const connected = status?.grant_status === "granted";
 
   useEffect(() => {
@@ -84,13 +90,13 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
   }
 
   return (
-    <div className="min-h-screen pt-14 md:pl-[220px] md:pt-0">
-      <aside className="fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-2 bg-primary px-3 md:inset-y-0 md:left-0 md:right-auto md:h-full md:w-[220px] md:flex-col md:items-stretch md:gap-0 md:px-0">
-        <div className="flex items-center gap-2 md:h-[72px] md:border-b md:border-white/10 md:px-4">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-white/15 font-bold text-white">B</span>
-          <span className="hidden text-lg font-semibold tracking-tight text-white sm:inline">BundoPay</span>
+    <div className="min-h-screen pt-14 md:pl-[240px] md:pt-0">
+      <aside className="fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-2 border-b border-ink/[0.06] bg-white/60 px-3 backdrop-blur-xl md:inset-y-0 md:left-0 md:right-auto md:h-full md:w-[240px] md:flex-col md:items-stretch md:gap-8 md:border-b-0 md:border-r md:px-4 md:py-7">
+        <div className="flex items-center gap-3 md:px-3">
+          <span className="grid h-8 w-8 place-items-center rounded-[9px] bg-ink text-[15px] font-bold text-white">B</span>
+          <span className="hidden text-[17px] font-semibold tracking-[-0.01em] sm:inline">BundoPay</span>
         </div>
-        <nav className="ml-auto flex gap-1 md:ml-0 md:mt-4 md:flex-col md:px-2">
+        <nav aria-label="Main" className="ml-auto flex gap-1 md:ml-0 md:flex-col">
           {NAV.map((n) => {
             const active = n.href === "/" ? pathname === "/" : pathname.startsWith(n.href);
             return (
@@ -98,8 +104,9 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
                 key={n.href}
                 href={n.href}
                 aria-current={active ? "page" : undefined}
-                className={`relative flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition ${
-                  active ? "bg-primary-container font-semibold text-white shadow-sm" : "text-primary-fixed hover:bg-primary-container hover:text-white"
+                aria-label={n.label}
+                className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-[15px] transition ${
+                  active ? "bg-card font-semibold text-ink shadow-[0_1px_2px_rgb(54_33_62/0.06),0_0_0_1px_rgb(54_33_62/0.04)]" : "font-medium text-muted hover:bg-primary/[0.06] hover:text-ink"
                 }`}
               >
                 <Icon name={n.icon} />
@@ -110,47 +117,59 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
         </nav>
         <button
           onClick={() => supabase().auth.signOut()}
-          className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-primary-fixed hover:bg-primary-container hover:text-white md:mx-2 md:mb-3 md:mt-auto"
+          aria-label="Log out"
+          className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-[15px] font-medium text-muted hover:bg-primary/[0.06] hover:text-ink md:mt-auto"
         >
           <Icon name="logout" />
           <span className="hidden md:inline">Log out</span>
         </button>
       </aside>
 
-      <header className="sticky top-14 z-30 flex h-[64px] items-center justify-between gap-3 border-b border-line bg-card px-4 md:top-0 md:h-[72px] md:px-6">
-        <div className="flex min-w-0 items-center gap-3">
-          <h1 className="truncate text-xl font-semibold tracking-tight">{title}</h1>
-          {status && (
-            <Link
-              href="/settings"
-              className="hidden items-center gap-1.5 rounded-full border border-line bg-soft px-2.5 py-1 font-mono text-[11px] text-ink-2 sm:flex"
-            >
-              <span className={`h-2 w-2 rounded-full ${connected ? "bg-primary" : "bg-coral"}`} />
-              PayPal: <b className="text-ink">{connected ? (status.test_mode ? "Test account" : "Connected") : "Not connected"}</b>
-            </Link>
-          )}
-        </div>
-        {connected && (
-          <button
-            onClick={sync}
-            disabled={syncing}
-            className="inline-flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-1.5 text-sm font-medium text-white hover:bg-black disabled:opacity-60"
-          >
-            <Icon name="sync" className={`text-[18px] ${syncing ? "animate-spin" : ""}`} />
-            {syncing ? "Syncing" : "Sync"}
-          </button>
-        )}
-      </header>
+      <main className="mx-auto w-full max-w-[1256px] space-y-8 px-4 pb-16 pt-6 md:px-12 md:pt-10">
+        <header className="flex flex-wrap items-end justify-between gap-4">
+          <div className="min-w-0">
+            {back ? (
+              <Link href={back.href} className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:text-ink">
+                <Icon name="chevron_left" className="text-[18px]" /> {back.label}
+              </Link>
+            ) : (
+              <>
+                <h1 className="text-[32px] font-semibold leading-tight tracking-[-0.025em]">{title}</h1>
+                {subtitle && <p className="mt-1.5 text-[15px] text-muted">{subtitle}</p>}
+              </>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {status && (
+              <Link
+                href="/settings"
+                className="hidden min-h-9 items-center gap-2 rounded-full bg-card px-3.5 text-[13px] text-ink-2 ring-1 ring-ink/[0.08] sm:flex"
+              >
+                <span className={`h-2 w-2 rounded-full ${connected ? "bg-aqua shadow-[0_0_0_3px_rgb(138_198_208/0.25)]" : "bg-coral"}`} />
+                PayPal: <b className="font-semibold text-ink">{connected ? (status.test_mode ? "Test account" : "Connected") : "Not connected"}</b>
+              </Link>
+            )}
+            {connected && (
+              <button
+                onClick={sync}
+                disabled={syncing}
+                className="inline-flex min-h-10 items-center gap-2 rounded-full bg-card px-[18px] text-sm font-semibold text-ink ring-1 ring-ink/[0.12] hover:bg-[#f7fafb] disabled:opacity-60"
+              >
+                <Icon name="sync" className={`text-[18px] ${syncing ? "animate-spin" : ""}`} />
+                {syncing ? "Syncing" : "Sync"}
+              </button>
+            )}
+          </div>
+        </header>
 
-      <main className="mx-auto w-full max-w-[1280px] space-y-5 p-4 md:p-6">
         {reconnect && (
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-coral/30 bg-danger-soft px-4 py-3 text-sm">
+          <div className="flex items-center justify-between gap-4 rounded-2xl bg-danger-soft px-5 py-4 text-sm">
             <span>PayPal stopped giving BundoPay access.</span>
             <Link href="/settings" className="font-semibold text-danger">Reconnect</Link>
           </div>
         )}
         {syncError && (
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm">
+          <div className="flex items-center justify-between gap-4 rounded-2xl bg-danger-soft px-5 py-4 text-sm">
             <span>Sync failed: {syncError}</span>
             <button onClick={() => setSyncError(null)} className="font-semibold text-danger">Dismiss</button>
           </div>
@@ -163,11 +182,11 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
 
 function ConnectPrompt() {
   return (
-    <div className="mx-auto max-w-md rounded-2xl border border-line bg-card p-8 text-center shadow-sm">
-      <Icon name="link" className="text-[36px] text-primary" />
-      <h2 className="mt-3 text-xl font-semibold">Connect your PayPal account</h2>
-      <p className="mt-2 text-sm text-muted">BundoPay needs access to your PayPal disputes before the agent can help.</p>
-      <Link href="/onboarding" className="mt-5 inline-flex rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-container">
+    <div className="mx-auto max-w-md rounded-[20px] bg-card p-10 text-center shadow-card">
+      <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-primary-fixed text-primary"><Icon name="link" className="text-[24px]" /></span>
+      <h2 className="mt-4 text-xl font-semibold tracking-[-0.015em]">Connect your PayPal account</h2>
+      <p className="mt-2 text-sm leading-relaxed text-muted">BundoPay needs access to your PayPal disputes before the agent can help.</p>
+      <Link href="/onboarding" className="mt-6 inline-flex min-h-10 items-center rounded-full bg-primary px-5 text-sm font-semibold text-white hover:bg-primary-container">
         Connect PayPal
       </Link>
     </div>

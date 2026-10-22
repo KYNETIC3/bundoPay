@@ -12,7 +12,7 @@ type DataSummary = { kind: string; rows: number; last_import: string }[];
 
 export default function SettingsPage() {
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
+    <div className="mx-auto max-w-[760px] space-y-8">
       <PayPalCard />
       <RefundLimitCard />
       <StoreDataCard />
@@ -39,17 +39,17 @@ function PayPalCard() {
       </CardTitle>
       {connected ? (
         <>
-          <dl className="grid grid-cols-[8rem_1fr] gap-y-2 text-sm">
+          <dl className="grid grid-cols-[9rem_1fr] text-[15px] [&>*]:border-t [&>*]:border-ink/[0.06] [&>*]:py-4 [&>:nth-child(-n+2)]:border-t-0 [&>:nth-child(-n+2)]:pt-0">
             <dt className="text-muted">Merchant ID</dt>
-            <dd className="font-mono">{status.paypal_merchant_id}</dd>
+            <dd className="text-right text-muted">{status.paypal_merchant_id}</dd>
             <dt className="text-muted">Last sync</dt>
-            <dd>{dateTime(status.last_synced_at)}</dd>
+            <dd className="text-right text-muted tabular-nums">{dateTime(status.last_synced_at)}</dd>
             <dt className="text-muted">Allowed to</dt>
-            <dd className="flex flex-wrap gap-1.5">
-              {status.granted_scopes.map((f) => <Pill key={f}>{FEATURE_COPY[f]?.title ?? f}</Pill>)}
+            <dd className="flex flex-wrap justify-end gap-1.5">
+              {status.granted_scopes.map((f) => <Pill key={f} tone="cerulean">{FEATURE_COPY[f]?.title ?? f}</Pill>)}
             </dd>
           </dl>
-          <div className="mt-5 border-t border-line pt-4">
+          <div className="border-t border-ink/[0.06] pt-4">
             {confirming ? (
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="mr-auto">BundoPay will stop working on your disputes.</span>
@@ -120,10 +120,10 @@ function RefundLimitCard() {
       <div id="agent" className="scroll-mt-24" />
       <CardTitle>Agent refund limit</CardTitle>
 
-      <label className="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-line p-4">
+      <label className="flex cursor-pointer items-center justify-between gap-6">
         <div>
-          <div className="font-semibold">Refund small disputes automatically</div>
-          <div className="text-sm text-muted">Without asking you first, when the case can&rsquo;t clearly be won.</div>
+          <div className="text-[15px] font-medium">Refund small disputes automatically</div>
+          <div className="mt-1 text-[13px] leading-relaxed text-muted">Without asking you first, when the case can&rsquo;t clearly be won.</div>
         </div>
         <input
           type="checkbox"
@@ -132,13 +132,13 @@ function RefundLimitCard() {
           onChange={(e) => setRules({ ...rules, auto_refund_enabled: e.target.checked })}
           className="peer sr-only"
         />
-        <span className="relative h-6 w-11 shrink-0 rounded-full bg-line-strong transition peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary-container after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition peer-checked:after:translate-x-5" />
+        <span className="relative h-[31px] w-[51px] shrink-0 rounded-full bg-[#dde4ea] transition peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-aqua after:absolute after:left-0.5 after:top-0.5 after:h-[27px] after:w-[27px] after:rounded-full after:bg-white after:shadow-[0_2px_4px_rgb(54_33_62/0.2)] after:transition peer-checked:after:translate-x-5" />
       </label>
 
-      <div className={`mt-4 rounded-xl border border-line p-4 ${rules.auto_refund_enabled ? "" : "opacity-50"}`}>
-        <div className="mb-2 flex items-center justify-between">
-          <span className="font-semibold">Up to</span>
-          <span className="rounded-md bg-primary-fixed/60 px-2 py-0.5 font-mono text-lg font-bold text-primary tabular-nums">${limit.toFixed(2)}</span>
+      <div className={`mt-5 border-t border-ink/[0.06] pt-5 ${rules.auto_refund_enabled ? "" : "opacity-50"}`}>
+        <div className="mb-3 flex items-baseline justify-between">
+          <span className="text-[15px]">Up to</span>
+          <span className="text-[28px] font-semibold tracking-[-0.02em] tabular-nums">${limit.toFixed(2)}</span>
         </div>
         <input
           type="range"
@@ -151,16 +151,16 @@ function RefundLimitCard() {
           aria-label="Automatic refund limit"
           className="w-full accent-primary"
         />
-        <div className="flex justify-between font-mono text-[10px] text-muted">
+        <div className="mt-2 flex justify-between text-xs text-muted">
           <span>$0</span><span>$20 suggested</span><span>$100</span>
         </div>
       </div>
 
-      <p className="mt-3 text-sm text-muted">
+      <p className="mt-5 text-[13px] leading-relaxed text-muted">
         Above this amount, the agent prepares a refund or reply and waits for you to approve it.
       </p>
 
-      <div className="mt-4 flex items-center gap-3">
+      <div className="mt-5 flex items-center justify-end gap-3 border-t border-ink/[0.06] pt-5">
         <Button variant="primary" onClick={save} disabled={busy || !dirty}>Save</Button>
         {message && <span className="text-sm text-muted">{message}</span>}
       </div>
@@ -200,19 +200,24 @@ function StoreDataCard() {
     <Card>
       <div id="data" className="scroll-mt-24" />
       <CardTitle action={<Pill>Optional</Pill>}>Store data</CardTitle>
-      <p className="mb-4 text-sm text-muted">Upload CSV exports so the agent can prove delivery and fight disputes you can win.</p>
-      <ul className="divide-y divide-line">
+      <p className="-mt-2 mb-5 text-sm leading-relaxed text-muted">Upload CSV exports so the agent can prove delivery and fight disputes you can win.</p>
+      <ul className="divide-y divide-ink/[0.06]">
         {KINDS.map((k) => {
           const s = summary.find((x) => x.kind === k.kind);
           return (
-            <li key={k.kind} className="flex flex-wrap items-center justify-between gap-3 py-3">
-              <div className="min-w-0">
-                <div className="font-medium">{k.label}</div>
-                <div className="truncate font-mono text-[11px] text-muted" title={k.cols}>{msg[k.kind] ?? (s ? `${s.rows} rows · ${dateTime(s.last_import)}` : k.cols)}</div>
+            <li key={k.kind} className="flex flex-wrap items-center justify-between gap-4 py-4 first:pt-0 last:pb-0">
+              <div className="flex min-w-0 items-center gap-3.5">
+                <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-[10px] ${s ? "bg-primary-fixed text-primary" : "bg-soft text-muted"}`}>
+                  <Icon name={s ? "check" : "upload"} className="text-[18px]" />
+                </span>
+                <div className="min-w-0">
+                  <div className="text-[15px] font-medium">{k.label}</div>
+                  <div className="mt-0.5 truncate text-[13px] text-muted" title={k.cols}>{msg[k.kind] ?? (s ? `${s.rows} rows, ${dateTime(s.last_import)}` : "Not uploaded")}</div>
+                </div>
               </div>
-              <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-line-strong px-3 py-1.5 text-sm font-semibold hover:bg-soft">
+              <label className="inline-flex min-h-8 cursor-pointer items-center rounded-full bg-card px-3.5 text-[13px] font-semibold ring-1 ring-ink/[0.12] hover:bg-[#f7fafb]">
                 <input type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => e.target.files?.[0] && upload(k.kind, e.target.files[0])} />
-                <Icon name="upload" className="text-[18px]" /> Upload
+                {s ? "Replace" : "Upload"}
               </label>
             </li>
           );
