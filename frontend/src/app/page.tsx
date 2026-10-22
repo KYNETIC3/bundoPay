@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { DisputeTable } from "@/components/DisputeTable";
-import { Button, Card, CardTitle, Empty, Icon } from "@/components/ui";
+import { DisputeTable, unresolvedCount } from "@/components/DisputeTable";
+import { Button, Card, CardTitle, Empty, Icon, Pill } from "@/components/ui";
 import { money } from "@/lib/format";
 import { useLive } from "@/lib/hooks";
 import type { DisputeSummary } from "@/lib/types";
@@ -43,7 +43,10 @@ export default function OverviewPage() {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
         <Card className="lg:col-span-8">
           <CardTitle action={<Button variant="ghost" href="/disputes" className="text-xs">All disputes <Icon name="chevron_right" className="text-[16px]" /></Button>}>
-            Open disputes
+            <span className="flex items-center gap-2">
+              Open disputes
+              {disputes && <Pill tone={open.length ? "coral" : "soft"}>{unresolvedCount(disputes)} unresolved</Pill>}
+            </span>
           </CardTitle>
           {disputes === null ? (
             disputesError ? <p className="text-sm text-danger">{disputesError}</p> : null
