@@ -8,6 +8,7 @@ export type DisputeSummary = {
   amount: string | null;
   currency: string | null;
   due_date: string | null;
+  opened_at: string | null;
   updated_at: string;
   draft_id?: string | null;
   draft_action?: string | null;

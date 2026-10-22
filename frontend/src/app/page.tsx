@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { DisputeTable } from "@/components/DisputeTable";
-import { Button, Card, CardTitle, Empty, Icon } from "@/components/ui";
+import { DisputeTable, unresolvedCount } from "@/components/DisputeTable";
+import { Button, Card, CardTitle, Empty, Icon, Pill } from "@/components/ui";
 import { money } from "@/lib/format";
 import { useLive } from "@/lib/hooks";
 import type { DisputeSummary } from "@/lib/types";
@@ -18,7 +18,6 @@ type Overview = {
   refunded: string;
   refund_count: number;
   auto_count: number;
-  activity: { label: string; event: string; at: string; dispute_id: string | null; reason: string | null; amount: string | null; currency: string | null }[];
 };
 type AgentSettings = { auto_refund_enabled: boolean; auto_refund_limit: string };
 
@@ -28,12 +27,13 @@ export default function OverviewPage() {
   const { data: rules } = useLive<AgentSettings>("/agent/settings", 120_000);
   const open = (disputes ?? []).filter((d) => d.status !== "RESOLVED");
   const waiting = open.filter((d) => d.draft_status === "awaiting_approval").length;
+  const needsAction = open.filter((d) => d.status === "WAITING_FOR_SELLER_RESPONSE" || d.draft_status === "awaiting_approval").length;
   const cur = o?.currency ?? "USD";
 
   return (
     <>
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-        <Kpi swatch="bg-ink" label="Needs you" value={o?.needs_response ?? "–"} note={o ? `${waiting} ready to approve, ${money(o.at_stake, cur)} at stake` : ""} />
+        <Kpi swatch="bg-ink" label="Needs you" value={disputes ? needsAction : "–"} note={o ? `${waiting} ready to approve, ${money(o.at_stake, cur)} at stake` : ""} />
         <Kpi swatch="bg-aqua" label="Refunded" value={o ? money(o.refunded, cur) : "–"} note={o ? `${o.refund_count} refunds, ${o.auto_count} of them automatic` : ""} />
         <Kpi swatch="bg-muted" label="Due within 48h" value={o?.due_soon ?? "–"} note={o ? `${o.resolved} closed so far` : ""} />
       </div>
@@ -41,7 +41,10 @@ export default function OverviewPage() {
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
         <Card className="lg:col-span-8">
           <CardTitle action={<Button variant="ghost" href="/disputes" className="min-h-8 text-[13px]">All disputes <Icon name="chevron_right" className="text-[16px]" /></Button>}>
-            Open disputes
+            <span className="flex items-center gap-2">
+              Open disputes
+              {disputes && <Pill tone={open.length ? "coral" : "soft"}>{unresolvedCount(disputes)} unresolved</Pill>}
+            </span>
           </CardTitle>
           {disputes === null ? (
             disputesError ? <p className="text-sm text-danger">{disputesError}</p> : null

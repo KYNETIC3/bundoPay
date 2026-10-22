@@ -42,7 +42,7 @@ function PayPalCard() {
           <dl className="grid grid-cols-[9rem_1fr] text-[15px] [&>*]:border-t [&>*]:border-ink/[0.06] [&>*]:py-4 [&>:nth-child(-n+2)]:border-t-0 [&>:nth-child(-n+2)]:pt-0">
             <dt className="text-muted">Merchant ID</dt>
             <dd className="text-right text-muted">{status.paypal_merchant_id}</dd>
-            <dt className="text-muted">Last sync</dt>
+            <dt className="text-muted">Last refreshed</dt>
             <dd className="text-right text-muted tabular-nums">{dateTime(status.last_synced_at)}</dd>
             <dt className="text-muted">Allowed to</dt>
             <dd className="flex flex-wrap justify-end gap-1.5">
@@ -169,10 +169,10 @@ function RefundLimitCard() {
 }
 
 const KINDS = [
-  { kind: "orders", label: "Orders", cols: "order_id, order_date, total, currency, paypal_transaction_id" },
-  { kind: "shipments", label: "Shipments", cols: "order_id, carrier, tracking_number, status" },
-  { kind: "refunds", label: "Refunds", cols: "order_id, refund_id, amount, currency, paypal_refund_id" },
-  { kind: "tickets", label: "Support tickets", cols: "order_id, ticket_id, created_at, summary" },
+  { kind: "orders", label: "Orders", cols: "order_id, order_date, total, currency, paypal_transaction_id", hint: "order ID, order date, total, currency, PayPal transaction ID" },
+  { kind: "shipments", label: "Shipments", cols: "order_id, carrier, tracking_number, status", hint: "order ID, carrier, tracking number, status" },
+  { kind: "refunds", label: "Refunds", cols: "order_id, refund_id, amount, currency, paypal_refund_id", hint: "order ID, refund ID, amount, currency, PayPal refund ID" },
+  { kind: "tickets", label: "Support tickets", cols: "order_id, ticket_id, created_at, summary", hint: "order ID, ticket ID, date opened, summary" },
 ];
 
 function StoreDataCard() {
@@ -214,7 +214,7 @@ function StoreDataCard() {
                 </span>
                 <div className="min-w-0">
                   <div className="text-[15px] font-medium">{k.label}</div>
-                  <div className="mt-0.5 truncate text-[13px] text-muted" title={k.cols}>{msg[k.kind] ?? (s ? `${s.rows} rows, ${dateTime(s.last_import)}` : "Not uploaded")}</div>
+                  <div className="mt-0.5 truncate text-[13px] text-muted" title={`CSV columns: ${k.cols}`}>{msg[k.kind] ?? (s ? `${s.rows} rows, ${dateTime(s.last_import)}` : `Needs: ${k.hint}`)}</div>
                 </div>
               </div>
               <label className="inline-flex min-h-8 cursor-pointer items-center rounded-full bg-card px-3.5 text-[13px] font-semibold ring-1 ring-ink/[0.12] hover:bg-[#f7fafb]">

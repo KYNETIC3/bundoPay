@@ -161,7 +161,7 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
         )}
         {syncError && (
           <div className="flex items-center justify-between gap-4 rounded-2xl bg-danger-soft px-5 py-4 text-sm">
-            <span>Sync failed: {syncError}</span>
+            <span>Couldn&rsquo;t refresh from PayPal: {syncError}</span>
             <button onClick={() => setSyncError(null)} className="font-semibold text-danger">Dismiss</button>
           </div>
         )}

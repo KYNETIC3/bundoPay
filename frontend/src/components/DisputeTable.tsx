@@ -1,5 +1,7 @@
 "use client";
 
+import { AllCommunityModule, ModuleRegistry, themeQuartz, type ColDef, type ICellRendererParams, type PostSortRowsParams } from "ag-grid-community";
+import { AgGridReact } from "ag-grid-react";
 import Link from "next/link";
 
 import { money } from "@/lib/format";
@@ -9,49 +11,149 @@ import type { DisputeSummary } from "@/lib/types";
 import { Countdown } from "./Countdown";
 import { Button, Pill } from "./ui";
 
+ModuleRegistry.registerModules([AllCommunityModule]);
+
+const theme = themeQuartz.withParams({
+  fontFamily: "inherit",
+  fontSize: 14,
+  foregroundColor: "var(--color-ink)",
+  backgroundColor: "var(--color-card)",
+  accentColor: "var(--color-primary)",
+  borderColor: "rgb(54 33 62 / 0.06)",
+  headerBackgroundColor: "var(--color-card)",
+  headerTextColor: "var(--color-muted)",
+  headerFontSize: 13,
+  headerFontWeight: 500,
+  headerColumnBorder: false,
+  rowHoverColor: "#f8fbfc",
+  wrapperBorder: false,
+  wrapperBorderRadius: 0,
+  rowHeight: 68,
+  headerHeight: 40,
+  cellHorizontalPadding: 16,
+});
+
+type Cell = ICellRendererParams<DisputeSummary>;
+
+const isOpen = (d: DisputeSummary) => d.status !== "RESOLVED";
+
+/** Whole days since PayPal opened the dispute. */
+function ageDays(d: DisputeSummary): number | null {
+  if (!d.opened_at) return null;
+  return Math.max(0, Math.floor((Date.now() - new Date(d.opened_at).getTime()) / 86_400_000));
+}
+
+const columns: ColDef<DisputeSummary>[] = [
+  {
+    headerName: "Dispute",
+    colId: "dispute",
+    valueGetter: (p) => p.data?.reason_label ?? "Dispute",
+    pinned: "left",
+    minWidth: 200,
+    flex: 2,
+    cellRenderer: ({ data: d }: Cell) =>
+      d && (
+        <div className="flex h-full flex-col justify-center leading-tight">
+          <Link href={`/disputes/${d.id}`} className="font-semibold text-ink hover:text-primary">{d.reason_label ?? "Dispute"}</Link>
+          <span className="mt-1 text-xs text-muted">{d.paypal_dispute_id}</span>
+        </div>
+      ),
+  },
+  {
+    headerName: "Amount",
+    colId: "amount",
+    valueGetter: (p) => (p.data?.amount != null ? Number(p.data.amount) : null),
+    type: "rightAligned",
+    width: 120,
+    cellRenderer: ({ data: d }: Cell) => d && <span className="font-semibold tabular-nums">{money(d.amount, d.currency)}</span>,
+  },
+  {
+    headerName: "Status",
+    colId: "status",
+    valueGetter: (p) => (p.data ? disputeStatus(p.data.status).label : ""),
+    width: 160,
+    cellRenderer: ({ data: d }: Cell) => {
+      if (!d) return null;
+      const s = disputeStatus(d.status);
+      return <Pill tone={s.tone}>{s.label}</Pill>;
+    },
+  },
+  {
+    headerName: "Deadline",
+    colId: "deadline",
+    valueGetter: (p) => (p.data && isOpen(p.data) && p.data.due_date ? new Date(p.data.due_date).getTime() : null),
+    sort: "asc",
+    width: 150,
+    cellRenderer: ({ data: d }: Cell) => d && (isOpen(d) ? <Countdown due={d.due_date} /> : <span className="text-muted">—</span>),
+  },
+  {
+    headerName: "Age",
+    colId: "age",
+    valueGetter: (p) => (p.data ? ageDays(p.data) : null),
+    width: 90,
+    cellRenderer: ({ data: d, value }: Cell) =>
+      d && (value == null ? (
+        <span className="text-muted">—</span>
+      ) : (
+        <span className="text-[13px] tabular-nums text-muted" title={`Opened ${new Date(d.opened_at!).toLocaleString()}`}>
+          {value}d
+        </span>
+      )),
+  },
+  {
+    headerName: "Bundo",
+    colId: "agent",
+    valueGetter: (p) => (p.data ? agentState({ status: p.data.status, draft_status: p.data.draft_status ?? null, draft_action: p.data.draft_action ?? null }).label : ""),
+    width: 160,
+    cellRenderer: ({ data: d }: Cell) => {
+      if (!d) return null;
+      const a = agentState({ status: d.status, draft_status: d.draft_status ?? null, draft_action: d.draft_action ?? null });
+      return <Pill tone={a.tone}>{a.label}</Pill>;
+    },
+  },
+  {
+    headerName: "",
+    colId: "action",
+    sortable: false,
+    width: 100,
+    cellClass: "flex items-center justify-end",
+    cellRenderer: ({ data: d }: Cell) => {
+      if (!d) return null;
+      const ready = d.draft_status === "awaiting_approval" && isOpen(d);
+      return ready ? (
+        <Button variant="primary" href={`/disputes/${d.id}/approve`} className="min-h-8 px-3.5 text-[13px]">Review</Button>
+      ) : (
+        <Button href={`/disputes/${d.id}`} className="min-h-8 px-3.5 text-[13px]">Open</Button>
+      );
+    },
+  },
+];
+
+/** Whatever column the merchant sorts by, unresolved disputes stay above closed ones. */
+function unresolvedFirst({ nodes }: PostSortRowsParams<DisputeSummary>) {
+  const open = nodes.filter((n) => n.data && isOpen(n.data));
+  const closed = nodes.filter((n) => !n.data || !isOpen(n.data));
+  nodes.splice(0, nodes.length, ...open, ...closed);
+}
+
 export function DisputeTable({ items }: { items: DisputeSummary[] }) {
   return (
-    <div className="-mx-7 overflow-x-auto">
-      <table className="w-full min-w-[680px] border-collapse text-left text-sm">
-        <thead>
-          <tr className="text-[13px] font-medium text-muted">
-            <th className="px-7 pb-3 font-medium">Dispute</th>
-            <th className="px-4 pb-3 text-right font-medium">Amount</th>
-            <th className="px-4 pb-3 font-medium">Status</th>
-            <th className="px-4 pb-3 font-medium">Deadline</th>
-            <th className="px-4 pb-3 font-medium">Bundo</th>
-            <th className="px-7 pb-3 text-right" aria-label="Action" />
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((d) => {
-            const s = disputeStatus(d.status);
-            const a = agentState({ status: d.status, draft_status: d.draft_status ?? null, draft_action: d.draft_action ?? null });
-            const ready = d.draft_status === "awaiting_approval" && d.status !== "RESOLVED";
-            return (
-              <tr key={d.id} className="border-t border-ink/[0.06] transition-colors hover:bg-[#f8fbfc]">
-                <td className="px-7 py-4">
-                  <Link href={`/disputes/${d.id}`} className="font-semibold text-ink hover:text-primary">
-                    {d.reason_label ?? "Dispute"}
-                  </Link>
-                  <div className="mt-1 text-xs text-muted">{d.paypal_dispute_id}</div>
-                </td>
-                <td className="px-4 py-4 text-right font-semibold tabular-nums">{money(d.amount, d.currency)}</td>
-                <td className="px-4 py-4"><Pill tone={s.tone}>{s.label}</Pill></td>
-                <td className="px-4 py-4">{d.status === "RESOLVED" ? <span className="text-muted">—</span> : <Countdown due={d.due_date} />}</td>
-                <td className="px-4 py-4"><Pill tone={a.tone}>{a.label}</Pill></td>
-                <td className="px-7 py-4 text-right">
-                  {ready ? (
-                    <Button variant="primary" href={`/disputes/${d.id}/approve`} className="min-h-8 px-3.5 text-[13px]">Review</Button>
-                  ) : (
-                    <Button href={`/disputes/${d.id}`} className="min-h-8 px-3.5 text-[13px]">Open</Button>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="-mx-7">
+      <AgGridReact<DisputeSummary>
+        theme={theme}
+        rowData={items}
+        columnDefs={columns}
+        defaultColDef={{ sortable: true, resizable: false, suppressMovable: true, cellClass: "flex items-center" }}
+        getRowId={(p) => p.data.id}
+        postSortRows={unresolvedFirst}
+        rowClassRules={{ "opacity-60": (p) => !!p.data && !isOpen(p.data) }}
+        domLayout="autoHeight"
+        suppressCellFocus
+      />
     </div>
   );
+}
+
+export function unresolvedCount(items: DisputeSummary[] | null | undefined): number {
+  return (items ?? []).filter(isOpen).length;
 }

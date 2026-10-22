@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 
-import { DisputeTable } from "@/components/DisputeTable";
-import { Card, Empty } from "@/components/ui";
+import { DisputeTable, unresolvedCount } from "@/components/DisputeTable";
+import { Card, Empty, Pill } from "@/components/ui";
 import { useLive } from "@/lib/hooks";
 import type { DisputeSummary } from "@/lib/types";
 
@@ -23,22 +23,25 @@ export default function DisputesPage() {
 
   return (
     <Card>
-      <div role="tablist" aria-label="Filter disputes" className="mb-6 inline-flex flex-wrap gap-1 rounded-full bg-soft p-1">
-        {FILTERS.map((f) => {
-          const count = (data ?? []).filter(f.test).length;
-          const on = f.key === filter;
-          return (
-            <button
-              key={f.key}
-              role="tab"
-              aria-selected={on}
-              onClick={() => setFilter(f.key)}
-              className={`inline-flex min-h-[34px] items-center gap-2 rounded-full px-4 text-[13px] transition ${on ? "bg-card font-semibold text-ink shadow-[0_1px_3px_rgb(54_33_62/0.1)]" : "font-medium text-ink-2 hover:text-ink"}`}
-            >
-              {f.label}<span className="text-xs text-muted tabular-nums">{count}</span>
-            </button>
-          );
-        })}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div role="tablist" aria-label="Filter disputes" className="inline-flex flex-wrap gap-1 rounded-full bg-soft p-1">
+          {FILTERS.map((f) => {
+            const count = (data ?? []).filter(f.test).length;
+            const on = f.key === filter;
+            return (
+              <button
+                key={f.key}
+                role="tab"
+                aria-selected={on}
+                onClick={() => setFilter(f.key)}
+                className={`inline-flex min-h-[34px] items-center gap-2 rounded-full px-4 text-[13px] transition ${on ? "bg-card font-semibold text-ink shadow-[0_1px_3px_rgb(54_33_62/0.1)]" : "font-medium text-ink-2 hover:text-ink"}`}
+              >
+                {f.label}<span className="text-xs text-muted tabular-nums">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+        {data && <Pill tone={unresolvedCount(data) ? "coral" : "soft"}>{unresolvedCount(data)} unresolved</Pill>}
       </div>
       {error && <p className="text-sm text-danger">{error}</p>}
       {data && items.length === 0 ? (
