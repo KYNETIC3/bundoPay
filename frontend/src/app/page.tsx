@@ -19,12 +19,10 @@ type Overview = {
   refund_count: number;
   auto_count: number;
 };
-type AgentSettings = { auto_refund_enabled: boolean; auto_refund_limit: string };
 
 export default function OverviewPage() {
   const { data: o } = useLive<Overview>("/overview");
   const { data: disputes, error: disputesError } = useLive<DisputeSummary[]>("/disputes");
-  const { data: rules } = useLive<AgentSettings>("/agent/settings", 120_000);
   const open = (disputes ?? []).filter((d) => d.status !== "RESOLVED");
   const waiting = open.filter((d) => d.draft_status === "awaiting_approval").length;
   const needsAction = open.filter((d) => d.status === "WAITING_FOR_SELLER_RESPONSE" || d.draft_status === "awaiting_approval").length;
@@ -38,7 +36,7 @@ export default function OverviewPage() {
         <Kpi swatch="bg-muted" label="Due within 48h" value={o?.due_soon ?? "–"} note={o ? `${o.resolved} closed so far` : ""} />
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <Card className="lg:col-span-8">
           <CardTitle action={<Button variant="ghost" href="/disputes" className="min-h-8 text-[13px]">All disputes <Icon name="chevron_right" className="text-[16px]" /></Button>}>
             <span className="flex items-center gap-2">
@@ -55,26 +53,7 @@ export default function OverviewPage() {
           )}
         </Card>
 
-        <div className="space-y-6 lg:col-span-4">
-          <AskCard />
-          <Card>
-            <CardTitle action={<Button variant="ghost" href="/settings#agent" className="min-h-8 text-[13px]">Change</Button>}>Refund limit</CardTitle>
-            {rules && (
-              <div className="flex items-center gap-4">
-                <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-[14px] ${rules.auto_refund_enabled ? "bg-primary-fixed text-primary" : "bg-soft text-muted"}`}>
-                  <Icon name={rules.auto_refund_enabled ? "bolt" : "front_hand"} />
-                </span>
-                <div className="text-sm leading-relaxed text-ink-2">
-                  {rules.auto_refund_enabled ? (
-                    <>Bundo refunds up to <b className="font-semibold text-ink tabular-nums">{money(rules.auto_refund_limit, cur)}</b> on its own. Anything above waits for you.</>
-                  ) : (
-                    <>Bundo asks you before every refund.</>
-                  )}
-                </div>
-              </div>
-            )}
-          </Card>
-        </div>
+        <AskCard />
       </div>
     </>
   );
@@ -99,14 +78,14 @@ function AskCard() {
   const router = useRouter();
   const [q, setQ] = useState("");
   return (
-    <Card className="bg-ink text-white shadow-lift">
+    <Card className="flex flex-col bg-ink text-white shadow-lift lg:col-span-4">
       <h2 className="flex items-center gap-2.5 text-[19px] font-semibold tracking-[-0.015em]">
         <Icon name="forum" />
         Ask Bundo
       </h2>
       <p className="mb-5 mt-2 text-sm leading-relaxed text-white/70">Ask about a case, or tell it what to refund. You approve before money moves.</p>
       <form
-        className="flex gap-2 rounded-full bg-white/10 p-1.5 ring-1 ring-inset ring-white/15 focus-within:ring-aqua"
+        className="mt-auto flex gap-2 rounded-full bg-white/10 p-1.5 ring-1 ring-inset ring-white/15 focus-within:ring-aqua"
         onSubmit={(e) => {
           e.preventDefault();
           router.push(`/agent${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`);
