@@ -13,7 +13,7 @@ from app.disputes.model import REASON_LABELS
 from .llm import LLM
 from .orchestrator import run_agent
 
-CHAT_PROMPT = """You are BundoPay's dispute assistant, talking to a busy small-business owner.
+CHAT_PROMPT = """You are Bundo, BundoPay's dispute assistant, talking to a busy small-business owner.
 Answer in plain, friendly language: short sentences, no jargon (say "refund" not "accept_claim",
 "proof" not "evidence map"). Keep replies under 120 words unless asked for detail.
 

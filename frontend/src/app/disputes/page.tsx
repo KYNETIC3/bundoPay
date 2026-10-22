@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 
-import { DisputeTable } from "@/components/DisputeTable";
-import { Card, Empty } from "@/components/ui";
+import { DisputeTable, unresolvedCount } from "@/components/DisputeTable";
+import { Card, Empty, Pill } from "@/components/ui";
 import { useLive } from "@/lib/hooks";
 import type { DisputeSummary } from "@/lib/types";
 
@@ -23,27 +23,30 @@ export default function DisputesPage() {
 
   return (
     <Card>
-      <div role="tablist" aria-label="Filter disputes" className="mb-4 flex flex-wrap gap-2">
-        {FILTERS.map((f) => {
-          const count = (data ?? []).filter(f.test).length;
-          const on = f.key === filter;
-          return (
-            <button
-              key={f.key}
-              role="tab"
-              aria-selected={on}
-              onClick={() => setFilter(f.key)}
-              className={`rounded-full px-4 py-1 text-xs font-bold tracking-wide transition active:scale-95 ${on ? f.on : f.off}`}
-            >
-              {f.label} ({count})
-            </button>
-          );
-        })}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div role="tablist" aria-label="Filter disputes" className="flex flex-wrap gap-2">
+          {FILTERS.map((f) => {
+            const count = (data ?? []).filter(f.test).length;
+            const on = f.key === filter;
+            return (
+              <button
+                key={f.key}
+                role="tab"
+                aria-selected={on}
+                onClick={() => setFilter(f.key)}
+                className={`rounded-full px-4 py-1 text-xs font-bold tracking-wide transition active:scale-95 ${on ? f.on : f.off}`}
+              >
+                {f.label} ({count})
+              </button>
+            );
+          })}
+        </div>
+        {data && <Pill tone={unresolvedCount(data) ? "coral" : "soft"}>{unresolvedCount(data)} unresolved</Pill>}
       </div>
       {error && <p className="text-sm text-danger">{error}</p>}
       {data && items.length === 0 ? (
         <Empty icon="inbox" title={filter === "all" ? "No disputes yet" : "Nothing here"}>
-          {filter === "all" && "When a buyer opens a dispute on PayPal, it appears here within 15 minutes, or right away if you press Sync."}
+          {filter === "all" && "When a buyer opens a dispute on PayPal, it appears here within 15 minutes, or right away if you press Refresh."}
         </Empty>
       ) : (
         data && <DisputeTable items={items} />

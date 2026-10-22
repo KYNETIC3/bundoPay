@@ -1,11 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { DisputeTable } from "@/components/DisputeTable";
-import { Button, Card, CardTitle, Empty, Icon } from "@/components/ui";
+import { DisputeTable, unresolvedCount } from "@/components/DisputeTable";
+import { Button, Card, CardTitle, Empty, Icon, Pill } from "@/components/ui";
 import { money } from "@/lib/format";
 import { useLive } from "@/lib/hooks";
 import type { DisputeSummary } from "@/lib/types";
@@ -19,7 +18,6 @@ type Overview = {
   refunded: string;
   refund_count: number;
   auto_count: number;
-  activity: { label: string; event: string; at: string; dispute_id: string | null; reason: string | null; amount: string | null; currency: string | null }[];
 };
 type AgentSettings = { auto_refund_enabled: boolean; auto_refund_limit: string };
 
@@ -29,21 +27,24 @@ export default function OverviewPage() {
   const { data: rules } = useLive<AgentSettings>("/agent/settings", 120_000);
   const open = (disputes ?? []).filter((d) => d.status !== "RESOLVED");
   const waiting = open.filter((d) => d.draft_status === "awaiting_approval").length;
+  const needsAction = open.filter((d) => d.status === "WAITING_FOR_SELLER_RESPONSE" || d.draft_status === "awaiting_approval").length;
   const cur = o?.currency ?? "USD";
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi tone="bg-cream text-ink border border-cream-line" icon="pending_actions" label="Need your response" value={o?.needs_response ?? "–"} note={o ? `${money(o.at_stake, cur)} at stake` : ""} />
-        <Kpi tone="bg-plum text-white" icon="approval" label="Waiting for your OK" value={waiting} note="Drafts ready to approve" />
-        <Kpi tone="bg-coral text-white" icon="currency_exchange" label="Refunded" value={o ? money(o.refunded, cur) : "–"} note={o ? `${o.refund_count} refunds · ${o.auto_count} automatic` : ""} />
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+        <Kpi tone="bg-coral text-white" icon="pending_actions" label="Needs your action" value={disputes ? needsAction : "–"} note={o ? `${waiting} ready to approve · ${money(o.at_stake, cur)} at stake` : ""} />
+        <Kpi tone="bg-plum text-white" icon="currency_exchange" label="Refunded" value={o ? money(o.refunded, cur) : "–"} note={o ? `${o.refund_count} refunds · ${o.auto_count} automatic` : ""} />
         <Kpi tone="bg-steel text-white" icon="schedule" label="Due within 48h" value={o?.due_soon ?? "–"} note={o ? `${o.resolved} closed so far` : ""} />
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
         <Card className="lg:col-span-8">
           <CardTitle action={<Button variant="ghost" href="/disputes" className="text-xs">All disputes <Icon name="chevron_right" className="text-[16px]" /></Button>}>
-            Open disputes
+            <span className="flex items-center gap-2">
+              Open disputes
+              {disputes && <Pill tone={open.length ? "coral" : "soft"}>{unresolvedCount(disputes)} unresolved</Pill>}
+            </span>
           </CardTitle>
           {disputes === null ? (
             disputesError ? <p className="text-sm text-danger">{disputesError}</p> : null
@@ -65,34 +66,12 @@ export default function OverviewPage() {
                 </span>
                 <div className="text-sm">
                   {rules.auto_refund_enabled ? (
-                    <>Agent refunds up to <b className="font-mono">{money(rules.auto_refund_limit, cur)}</b> on its own.</>
+                    <>Bundo refunds up to <b className="font-mono">{money(rules.auto_refund_limit, cur)}</b> on its own.</>
                   ) : (
-                    <>Agent asks you before every refund.</>
+                    <>Bundo asks you before every refund.</>
                   )}
                 </div>
               </div>
-            )}
-          </Card>
-          <Card>
-            <CardTitle>Agent activity</CardTitle>
-            {!o?.activity.length ? (
-              <p className="text-sm text-muted">No activity yet.</p>
-            ) : (
-              <ul className="divide-y divide-line">
-                {o.activity.slice(0, 6).map((a, i) => (
-                  <li key={i} className="flex items-center justify-between gap-3 py-2 text-sm">
-                    <div className="min-w-0">
-                      {a.dispute_id ? (
-                        <Link href={`/disputes/${a.dispute_id}`} className="block truncate font-medium hover:underline">{a.label}</Link>
-                      ) : (
-                        <span className="block truncate font-medium">{a.label}</span>
-                      )}
-                      <span className="font-mono text-[11px] text-muted">{new Date(a.at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}</span>
-                    </div>
-                    {a.amount && <span className="shrink-0 font-mono text-xs font-semibold">{money(a.amount, a.currency)}</span>}
-                  </li>
-                ))}
-              </ul>
             )}
           </Card>
         </div>
@@ -123,7 +102,7 @@ function AskCard() {
     <Card className="bg-ink text-white border-ink">
       <div className="flex items-center gap-2">
         <Icon name="forum" />
-        <span className="font-semibold">Ask the agent</span>
+        <span className="font-semibold">Ask Bundo</span>
       </div>
       <form
         className="mt-3 flex gap-2"

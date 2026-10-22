@@ -34,7 +34,7 @@ function PayPalCard() {
 
   return (
     <Card>
-      <CardTitle action={<Pill tone={connected ? "cerulean" : "coral"}>{connected ? (status.test_mode ? "Test account" : "Connected") : "Not connected"}</Pill>}>
+      <CardTitle action={<Pill tone={connected ? "cerulean" : "coral"}>{connected ? "Connected" : "Not connected"}</Pill>}>
         PayPal account
       </CardTitle>
       {connected ? (
@@ -42,7 +42,7 @@ function PayPalCard() {
           <dl className="grid grid-cols-[8rem_1fr] gap-y-2 text-sm">
             <dt className="text-muted">Merchant ID</dt>
             <dd className="font-mono">{status.paypal_merchant_id}</dd>
-            <dt className="text-muted">Last sync</dt>
+            <dt className="text-muted">Last refreshed</dt>
             <dd>{dateTime(status.last_synced_at)}</dd>
             <dt className="text-muted">Allowed to</dt>
             <dd className="flex flex-wrap gap-1.5">
@@ -65,7 +65,7 @@ function PayPalCard() {
         </>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted">Connect PayPal so the agent can see and answer your disputes.</p>
+          <p className="text-sm text-muted">Connect PayPal so Bundo can see and answer your disputes.</p>
           <Button variant="primary" href="/onboarding">Connect PayPal</Button>
         </div>
       )}
@@ -90,7 +90,7 @@ function RefundLimitCard() {
   if (!rules)
     return message ? (
       <Card>
-        <CardTitle>Agent refund limit</CardTitle>
+        <CardTitle>Bundo&rsquo;s refund limit</CardTitle>
         <p className="text-sm text-danger">{message}</p>
       </Card>
     ) : null;
@@ -118,7 +118,7 @@ function RefundLimitCard() {
   return (
     <Card>
       <div id="agent" className="scroll-mt-24" />
-      <CardTitle>Agent refund limit</CardTitle>
+      <CardTitle>Bundo&rsquo;s refund limit</CardTitle>
 
       <label className="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-line p-4">
         <div>
@@ -157,7 +157,7 @@ function RefundLimitCard() {
       </div>
 
       <p className="mt-3 text-sm text-muted">
-        Above this amount, the agent prepares a refund or reply and waits for you to approve it.
+        Above this amount, Bundo prepares a refund or reply and waits for you to approve it.
       </p>
 
       <div className="mt-4 flex items-center gap-3">
@@ -169,10 +169,10 @@ function RefundLimitCard() {
 }
 
 const KINDS = [
-  { kind: "orders", label: "Orders", cols: "order_id, order_date, total, currency, paypal_transaction_id" },
-  { kind: "shipments", label: "Shipments", cols: "order_id, carrier, tracking_number, status" },
-  { kind: "refunds", label: "Refunds", cols: "order_id, refund_id, amount, currency, paypal_refund_id" },
-  { kind: "tickets", label: "Support tickets", cols: "order_id, ticket_id, created_at, summary" },
+  { kind: "orders", label: "Orders", cols: "order_id, order_date, total, currency, paypal_transaction_id", hint: "order ID, order date, total, currency, PayPal transaction ID" },
+  { kind: "shipments", label: "Shipments", cols: "order_id, carrier, tracking_number, status", hint: "order ID, carrier, tracking number, status" },
+  { kind: "refunds", label: "Refunds", cols: "order_id, refund_id, amount, currency, paypal_refund_id", hint: "order ID, refund ID, amount, currency, PayPal refund ID" },
+  { kind: "tickets", label: "Support tickets", cols: "order_id, ticket_id, created_at, summary", hint: "order ID, ticket ID, date opened, summary" },
 ];
 
 function StoreDataCard() {
@@ -199,8 +199,8 @@ function StoreDataCard() {
   return (
     <Card>
       <div id="data" className="scroll-mt-24" />
-      <CardTitle action={<Pill>Optional</Pill>}>Store data</CardTitle>
-      <p className="mb-4 text-sm text-muted">Upload CSV exports so the agent can prove delivery and fight disputes you can win.</p>
+      <CardTitle action={<Pill>Optional</Pill>}>Order records</CardTitle>
+      <p className="mb-4 text-sm text-muted">Upload your shop&rsquo;s order, shipping, refund and support-ticket exports (CSV). Bundo matches them to each dispute, for example a tracking number that proves delivery, so it can argue your case instead of just refunding.</p>
       <ul className="divide-y divide-line">
         {KINDS.map((k) => {
           const s = summary.find((x) => x.kind === k.kind);
@@ -208,7 +208,7 @@ function StoreDataCard() {
             <li key={k.kind} className="flex flex-wrap items-center justify-between gap-3 py-3">
               <div className="min-w-0">
                 <div className="font-medium">{k.label}</div>
-                <div className="truncate font-mono text-[11px] text-muted" title={k.cols}>{msg[k.kind] ?? (s ? `${s.rows} rows · ${dateTime(s.last_import)}` : k.cols)}</div>
+                <div className="truncate text-xs text-muted" title={`CSV columns: ${k.cols}`}>{msg[k.kind] ?? (s ? `${s.rows} rows · ${dateTime(s.last_import)}` : `Needs: ${k.hint}`)}</div>
               </div>
               <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-line-strong px-3 py-1.5 text-sm font-semibold hover:bg-soft">
                 <input type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => e.target.files?.[0] && upload(k.kind, e.target.files[0])} />
