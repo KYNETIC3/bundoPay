@@ -12,7 +12,7 @@ import type { DisputeDetail } from "@/lib/types";
 
 const EVENT_LABELS: Record<string, string> = {
   "dispute.new_work_item": "PayPal asked for a response",
-  "agent.recommendation": "Agent reviewed the case",
+  "agent.recommendation": "Bundo reviewed the case",
   "agent.draft_ready": "Draft ready for you",
   "agent.past_due_blocked": "Paused: deadline passed",
   "draft.edited": "You edited the draft",
@@ -112,7 +112,7 @@ export default function DisputePage() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ink-2">
-                <Icon name="smart_toy" className="text-[16px]" /> Agent recommends
+                <Icon name="smart_toy" className="text-[16px]" /> Bundo recommends
               </p>
               <h3 className="mt-1 text-2xl font-bold tracking-tight">{rec ? headline : actionable ? "Not reviewed yet" : "Nothing to do"}</h3>
             </div>
@@ -181,7 +181,7 @@ export default function DisputePage() {
         <Card className="border-ink bg-ink text-white">
           <p className="font-semibold">Questions about this dispute?</p>
           <Button href={`/agent?q=${encodeURIComponent(`Tell me about dispute ${d.paypal_dispute_id}`)}`} className="mt-3 w-full border-white/20 bg-white/10 text-white hover:bg-white/20">
-            <Icon name="forum" className="text-[18px]" /> Ask the agent
+            <Icon name="forum" className="text-[18px]" /> Ask Bundo
           </Button>
         </Card>
         <Card>

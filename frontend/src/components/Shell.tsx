@@ -16,14 +16,14 @@ const BARE_PATHS = ["/login", "/onboarding", "/onboarding/return"];
 const NAV = [
   { href: "/", label: "Overview", icon: "dashboard" },
   { href: "/disputes", label: "Disputes", icon: "gavel" },
-  { href: "/agent", label: "Ask the agent", icon: "forum" },
+  { href: "/agent", label: "Ask Bundo", icon: "forum" },
   { href: "/settings", label: "Settings", icon: "tune" },
 ];
 
 const TITLES: [string, string][] = [
   ["/disputes/", "Dispute"],
   ["/disputes", "Disputes"],
-  ["/agent", "Ask the agent"],
+  ["/agent", "Ask Bundo"],
   ["/settings", "Settings"],
   ["/", "Overview"],
 ];
@@ -120,15 +120,6 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
       <header className="sticky top-14 z-30 flex h-[64px] items-center justify-between gap-3 border-b border-line bg-card px-4 md:top-0 md:h-[72px] md:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <h1 className="truncate text-xl font-semibold tracking-tight">{title}</h1>
-          {status && (
-            <Link
-              href="/settings"
-              className="hidden items-center gap-1.5 rounded-full border border-line bg-soft px-2.5 py-1 font-mono text-[11px] text-ink-2 sm:flex"
-            >
-              <span className={`h-2 w-2 rounded-full ${connected ? "bg-primary" : "bg-coral"}`} />
-              PayPal: <b className="text-ink">{connected ? (status.test_mode ? "Test account" : "Connected") : "Not connected"}</b>
-            </Link>
-          )}
         </div>
         {connected && (
           <button
@@ -136,8 +127,8 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
             disabled={syncing}
             className="inline-flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-1.5 text-sm font-medium text-white hover:bg-black disabled:opacity-60"
           >
-            <Icon name="sync" className={`text-[18px] ${syncing ? "animate-spin" : ""}`} />
-            {syncing ? "Syncing" : "Sync"}
+            <Icon name="refresh" className={`text-[18px] ${syncing ? "animate-spin" : ""}`} />
+            {syncing ? "Refreshing…" : "Refresh"}
           </button>
         )}
       </header>
@@ -151,7 +142,7 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
         )}
         {syncError && (
           <div className="flex items-center justify-between gap-3 rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm">
-            <span>Sync failed: {syncError}</span>
+            <span>Couldn&rsquo;t refresh from PayPal: {syncError}</span>
             <button onClick={() => setSyncError(null)} className="font-semibold text-danger">Dismiss</button>
           </div>
         )}
@@ -166,7 +157,7 @@ function ConnectPrompt() {
     <div className="mx-auto max-w-md rounded-2xl border border-line bg-card p-8 text-center shadow-sm">
       <Icon name="link" className="text-[36px] text-primary" />
       <h2 className="mt-3 text-xl font-semibold">Connect your PayPal account</h2>
-      <p className="mt-2 text-sm text-muted">BundoPay needs access to your PayPal disputes before the agent can help.</p>
+      <p className="mt-2 text-sm text-muted">BundoPay needs access to your PayPal disputes before Bundo can help.</p>
       <Link href="/onboarding" className="mt-5 inline-flex rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-container">
         Connect PayPal
       </Link>

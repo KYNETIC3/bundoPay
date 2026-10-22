@@ -100,7 +100,7 @@ const columns: ColDef<DisputeSummary>[] = [
       )),
   },
   {
-    headerName: "Agent",
+    headerName: "Bundo",
     colId: "agent",
     valueGetter: (p) => (p.data ? agentState({ status: p.data.status, draft_status: p.data.draft_status ?? null, draft_action: p.data.draft_action ?? null }).label : ""),
     width: 160,

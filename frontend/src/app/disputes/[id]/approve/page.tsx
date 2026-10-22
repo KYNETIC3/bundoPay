@@ -18,6 +18,32 @@ const HEADLINE: Record<Draft["action"], (amount: string, offer?: string) => stri
   provide_evidence: () => "Send your proof to PayPal",
 };
 
+const ACTION_TEXT: Record<Draft["action"], string> = {
+  accept_claim: "Refund the buyer",
+  make_offer: "Offer a partial refund",
+  provide_evidence: "Send proof",
+};
+// Fields shown elsewhere in the summary, or PayPal codes the merchant never needs to see.
+const SUMMARIZED = new Set(["note", "offer_amount", "offer_type", "accept_claim_type", "evidences"]);
+
+/** The draft as plain sentences, so the merchant never has to read raw PayPal JSON. */
+function describePayload(draft: Draft, disputeAmount: string): { label: string; value: string }[] {
+  const p = draft.payload_json as Record<string, any>;
+  const rows: { label: string; value: string }[] = [{ label: "Action", value: ACTION_TEXT[draft.action] }];
+  if (draft.action === "accept_claim") rows.push({ label: "Amount", value: disputeAmount });
+  if (draft.action === "make_offer" && p.offer_amount) rows.push({ label: "Offer", value: money(p.offer_amount.value, p.offer_amount.currency_code) });
+  for (const e of (p.evidences as any[] | undefined) ?? []) {
+    const tracking = (e.evidence_info?.tracking_info ?? []).map((t: any) => `${t.carrier_name_other ?? humanize(t.carrier_name)} ${t.tracking_number}`);
+    rows.push({ label: humanize(e.evidence_type), value: [...tracking, e.notes].filter(Boolean).join("\n") || "Included" });
+  }
+  if (draft.files.length) rows.push({ label: "Attached files", value: draft.files.map((f) => f.filename).join(", ") });
+  if (p.note) rows.push({ label: draft.action === "accept_claim" ? "Note to buyer" : "Message", value: p.note });
+  for (const [key, value] of Object.entries(p)) {
+    if (!SUMMARIZED.has(key) && value != null && typeof value !== "object") rows.push({ label: humanize(key), value: String(value) });
+  }
+  return rows;
+}
+
 export default function ApprovePage() {
   const { id } = useParams<{ id: string }>();
   const [d, setD] = useState<DisputeDetail | null>(null);
@@ -150,10 +176,15 @@ export default function ApprovePage() {
         )}
 
         <details className="mt-4 text-sm">
-          <summary className="cursor-pointer text-muted">Show exactly what PayPal receives</summary>
-          <pre className="mt-2 overflow-x-auto rounded-lg border border-line bg-soft p-3 font-mono text-[11px] leading-relaxed">
-            {JSON.stringify(p, null, 2)}
-          </pre>
+          <summary className="cursor-pointer text-muted">What Bundo will send to PayPal</summary>
+          <dl className="mt-2 grid grid-cols-[8rem_1fr] gap-x-3 gap-y-2 rounded-lg border border-line bg-soft p-3">
+            {describePayload(draft, amount).map((row, i) => (
+              <div key={i} className="contents">
+                <dt className="text-muted">{row.label}</dt>
+                <dd className="whitespace-pre-line">{row.value}</dd>
+              </div>
+            ))}
+          </dl>
         </details>
 
         {d.past_due && !editing && (

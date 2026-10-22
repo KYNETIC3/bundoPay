@@ -79,7 +79,7 @@ function AgentChat() {
             <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary-fixed text-primary"><Icon name="smart_toy" /></span>
             <div>
               <p className="text-lg font-semibold">Ask about your disputes</p>
-              <p className="text-sm text-muted">The agent can explain cases and prepare refunds. You approve before money moves.</p>
+              <p className="text-sm text-muted">Bundo can explain cases and prepare refunds. You approve before money moves.</p>
             </div>
             <div className="flex flex-wrap justify-center gap-2">
               {SUGGESTIONS.map((s) => (
@@ -107,7 +107,7 @@ function AgentChat() {
         )}
         {busy && (
           <div className="flex items-center gap-2 text-sm text-muted">
-            <Icon name="progress_activity" className="animate-spin text-[18px]" /> Agent is checking PayPal…
+            <Icon name="progress_activity" className="animate-spin text-[18px]" /> Bundo is checking PayPal…
           </div>
         )}
         <div ref={bottom} />
