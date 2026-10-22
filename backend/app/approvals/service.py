@@ -26,6 +26,7 @@ from app.db import connection, jsonb
 from app.deps import get_gateway, revocation_guard
 from app.disputes.model import REASON_LABELS
 from app.disputes.sync import upsert_dispute
+from app.events import notify_dispute_changed
 from app.paypal_gateway import PayPalError
 
 from .submit import ApprovalRecord, DraftRecord, SubmissionResult, submit_dispute_response
@@ -87,7 +88,13 @@ class PgSubmissionStore:
 
     async def set_draft_status(self, draft_id: str, status: str) -> None:
         async with connection() as conn:
-            await conn.execute("update drafts set status = %s, updated_at = now() where id = %s", (status, draft_id))
+            cur = await conn.execute(
+                "update drafts dr set status = %s, updated_at = now() from disputes d "
+                "where dr.id = %s and d.id = dr.dispute_id returning d.id, d.merchant_id",
+                (status, draft_id),
+            )
+            if row := await cur.fetchone():
+                await notify_dispute_changed(conn, row["merchant_id"], row["id"])
 
     async def save_dispute(self, merchant_id: str, raw: dict[str, Any]) -> None:
         async with connection() as conn:
@@ -124,6 +131,7 @@ async def _save_revision(conn, draft: dict[str, Any], payload: dict[str, Any], f
     )
     await audit(conn, event, merchant_id=draft["merchant_id"], dispute_id=draft["dispute_id"],
                 data={"draft_id": str(draft["id"]), "old_hash": draft["payload_hash"], "new_hash": new_hash, **data})
+    await notify_dispute_changed(conn, draft["merchant_id"], draft["dispute_id"])
     return new_hash
 
 
@@ -214,6 +222,7 @@ async def reject_draft(merchant_id: UUID, draft_id: UUID) -> None:
             conn, merchant_id, "Understood. I won't send anything for this dispute. Ask me if you want a different response.",
             kind="declined", dispute_id=draft["dispute_id"], draft_id=draft_id,
         )
+        await notify_dispute_changed(conn, merchant_id, draft["dispute_id"])
 
 
 async def _approve_and_submit(
@@ -256,6 +265,7 @@ async def _approve_and_submit(
             await conn.execute("update drafts set status = 'approved', updated_at = now() where id = %s", (draft_id,))
             await audit(conn, "draft.approved", merchant_id=merchant_id, dispute_id=draft["dispute_id"],
                         data={"draft_id": str(draft_id), "payload_hash": current, "expires_at": claims.expires_at, "source": source})
+            await notify_dispute_changed(conn, merchant_id, draft["dispute_id"])
 
     store = PgSubmissionStore()
     try:

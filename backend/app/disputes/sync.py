@@ -11,6 +11,7 @@ from psycopg import AsyncConnection
 
 from app.audit import audit
 from app.db import connection, jsonb
+from app.events import notify_dispute_changed
 from app.deps import get_gateway, revocation_guard
 from app.jobs.queue import enqueue
 
@@ -84,6 +85,7 @@ async def upsert_dispute(conn: AsyncConnection, merchant_id: UUID, raw: dict[str
         await audit(conn, "dispute.new_work_item", merchant_id=merchant_id, dispute_id=row["id"], data={"key": key})
     if facts.status == "RESOLVED" and prev_status != "RESOLVED":  # outcome is recorded once, when it closes
         await record_outcome(conn, row, facts.outcome_code)
+    await notify_dispute_changed(conn, merchant_id, row["id"])
     return row
 
 

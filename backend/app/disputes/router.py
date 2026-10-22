@@ -14,6 +14,7 @@ from app.approvals.tokens import ApprovalError
 from app.audit import audit
 from app.auth import CurrentMerchant, current_merchant
 from app.db import connection
+from app.events import notify_dispute_changed
 from app.paypal_gateway import PayPalError
 
 from .model import REASON_LABELS, parse_dispute
@@ -96,6 +97,7 @@ async def clear(dispute_id: UUID, merchant: CurrentMerchant = Depends(current_me
             raise HTTPException(409, {"code": "not_finished", "message": "Only closed or refunded disputes can be cleared."})
         await conn.execute("update disputes set archived_at = now() where id = %s", (dispute_id,))
         await audit(conn, "dispute.cleared", merchant_id=merchant.id, dispute_id=dispute_id)
+        await notify_dispute_changed(conn, merchant.id, dispute_id)
     return {"status": "cleared"}
 
 
@@ -105,6 +107,7 @@ async def restore(dispute_id: UUID, merchant: CurrentMerchant = Depends(current_
         await _owned_dispute(conn, merchant.id, dispute_id)
         await conn.execute("update disputes set archived_at = null where id = %s", (dispute_id,))
         await audit(conn, "dispute.restored", merchant_id=merchant.id, dispute_id=dispute_id)
+        await notify_dispute_changed(conn, merchant.id, dispute_id)
     return {"status": "restored"}
 
 
@@ -121,8 +124,11 @@ async def clear_finished(merchant: CurrentMerchant = Depends(current_merchant)) 
             """,
             (merchant.id,),
         )
-        n = len(await cur.fetchall())
+        rows = await cur.fetchall()
+        n = len(rows)
         await audit(conn, "dispute.cleared_finished", merchant_id=merchant.id, data={"count": n})
+        for r in rows:
+            await notify_dispute_changed(conn, merchant.id, r["id"])
     return {"cleared": n}
 
 
