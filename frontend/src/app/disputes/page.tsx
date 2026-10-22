@@ -43,7 +43,7 @@ export default function DisputesPage() {
       {error && <p className="text-sm text-danger">{error}</p>}
       {data && items.length === 0 ? (
         <Empty icon="inbox" title={filter === "all" ? "No disputes yet" : "Nothing here"}>
-          {filter === "all" && "When a buyer opens a dispute on PayPal, it appears here within 15 minutes, or right away if you press Sync."}
+          {filter === "all" && "When a buyer opens a dispute on PayPal, it appears here within 15 minutes, or right away if you press Refresh."}
         </Empty>
       ) : (
         data && <DisputeTable items={items} />

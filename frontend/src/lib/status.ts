@@ -15,7 +15,7 @@ export function disputeStatus(status: string): { label: string; tone: Tone } {
   }
 }
 
-/** What the agent has done, in a word or two. */
+/** What Bundo has done, in a word or two. */
 export function agentState(d: { status: string; draft_status: string | null; draft_action: string | null }): {
   label: string;
   tone: Tone;

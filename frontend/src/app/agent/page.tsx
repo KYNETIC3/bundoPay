@@ -78,7 +78,7 @@ function AgentChat() {
           <div className="flex h-full flex-col items-center justify-center gap-5 text-center">
             <span className="grid h-12 w-12 place-items-center rounded-full bg-ink text-ice"><Icon name="auto_awesome" /></span>
             <div>
-              <p className="text-lg font-semibold">Ask about your disputes</p>
+              <p className="text-lg font-semibold">Ask Bundo about your disputes</p>
               <p className="mt-1 text-sm text-muted">Try one of these, or ask in your own words.</p>
             </div>
             <div className="flex flex-wrap justify-center gap-2">
@@ -107,7 +107,7 @@ function AgentChat() {
         )}
         {busy && (
           <div className="flex items-center gap-2 text-sm text-muted">
-            <Icon name="progress_activity" className="animate-spin text-[18px]" /> Agent is checking PayPal…
+            <Icon name="progress_activity" className="animate-spin text-[18px]" /> Bundo is checking PayPal…
           </div>
         )}
         <div ref={bottom} />
@@ -123,7 +123,7 @@ function AgentChat() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask in plain words…"
-          aria-label="Message the agent"
+          aria-label="Message Bundo"
           className="min-h-12 min-w-0 flex-1 rounded-full bg-page px-5 text-[15px] ring-1 ring-inset ring-ink/[0.06] placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-aqua"
         />
         <Button variant="primary" disabled={busy || !input.trim()} aria-label="Send" className="h-11 w-11 shrink-0 px-0">

@@ -19,7 +19,7 @@ export function DisputeTable({ items }: { items: DisputeSummary[] }) {
             <th className="px-4 pb-3 text-right font-medium">Amount</th>
             <th className="px-4 pb-3 font-medium">Status</th>
             <th className="px-4 pb-3 font-medium">Deadline</th>
-            <th className="px-4 pb-3 font-medium">Agent</th>
+            <th className="px-4 pb-3 font-medium">Bundo</th>
             <th className="px-7 pb-3 text-right" aria-label="Action" />
           </tr>
         </thead>

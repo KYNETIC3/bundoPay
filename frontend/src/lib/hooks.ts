@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api } from "./api";
 
-/** Load a resource, refresh it every `intervalMs` and whenever the header's Sync finishes. */
+/** Load a resource, refresh it every `intervalMs` and whenever the header's Refresh finishes. */
 export function useLive<T>(path: string | null, intervalMs = 30_000) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);

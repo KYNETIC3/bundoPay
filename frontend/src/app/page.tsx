@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -33,9 +32,8 @@ export default function OverviewPage() {
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi swatch="bg-ink" label="Need your response" value={o?.needs_response ?? "–"} note={o ? `${money(o.at_stake, cur)} at stake` : ""} />
-        <Kpi swatch="bg-primary" label="Waiting for your OK" value={waiting} note="Drafts ready to approve" />
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+        <Kpi swatch="bg-ink" label="Needs you" value={o?.needs_response ?? "–"} note={o ? `${waiting} ready to approve, ${money(o.at_stake, cur)} at stake` : ""} />
         <Kpi swatch="bg-aqua" label="Refunded" value={o ? money(o.refunded, cur) : "–"} note={o ? `${o.refund_count} refunds, ${o.auto_count} of them automatic` : ""} />
         <Kpi swatch="bg-muted" label="Due within 48h" value={o?.due_soon ?? "–"} note={o ? `${o.resolved} closed so far` : ""} />
       </div>
@@ -65,34 +63,12 @@ export default function OverviewPage() {
                 </span>
                 <div className="text-sm leading-relaxed text-ink-2">
                   {rules.auto_refund_enabled ? (
-                    <>The agent refunds up to <b className="font-semibold text-ink tabular-nums">{money(rules.auto_refund_limit, cur)}</b> on its own. Anything above waits for you.</>
+                    <>Bundo refunds up to <b className="font-semibold text-ink tabular-nums">{money(rules.auto_refund_limit, cur)}</b> on its own. Anything above waits for you.</>
                   ) : (
-                    <>The agent asks you before every refund.</>
+                    <>Bundo asks you before every refund.</>
                   )}
                 </div>
               </div>
-            )}
-          </Card>
-          <Card>
-            <CardTitle>Agent activity</CardTitle>
-            {!o?.activity.length ? (
-              <p className="text-sm text-muted">No activity yet.</p>
-            ) : (
-              <ul className="divide-y divide-ink/[0.06]">
-                {o.activity.slice(0, 6).map((a, i) => (
-                  <li key={i} className="flex items-center justify-between gap-4 py-3.5 text-sm first:pt-0 last:pb-0">
-                    <div className="min-w-0">
-                      {a.dispute_id ? (
-                        <Link href={`/disputes/${a.dispute_id}`} className="block truncate font-semibold text-ink hover:text-primary">{a.label}</Link>
-                      ) : (
-                        <span className="block truncate font-semibold">{a.label}</span>
-                      )}
-                      <span className="mt-1 block text-xs text-muted">{new Date(a.at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}</span>
-                    </div>
-                    {a.amount && <span className="shrink-0 text-[13px] font-semibold tabular-nums">{money(a.amount, a.currency)}</span>}
-                  </li>
-                ))}
-              </ul>
             )}
           </Card>
         </div>
@@ -123,7 +99,7 @@ function AskCard() {
     <Card className="bg-ink text-white shadow-lift">
       <h2 className="flex items-center gap-2.5 text-[19px] font-semibold tracking-[-0.015em]">
         <Icon name="forum" />
-        Ask the agent
+        Ask Bundo
       </h2>
       <p className="mb-5 mt-2 text-sm leading-relaxed text-white/70">Ask about a case, or tell it what to refund. You approve before money moves.</p>
       <form
@@ -137,7 +113,7 @@ function AskCard() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="e.g. Refund anything under $20"
-          aria-label="Question for the agent"
+          aria-label="Question for Bundo"
           className="min-w-0 flex-1 bg-transparent px-3 text-sm text-white placeholder:text-white/55 focus:outline-none"
         />
         <button className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-aqua text-ink hover:bg-ice" aria-label="Ask">

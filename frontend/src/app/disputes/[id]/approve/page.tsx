@@ -147,9 +147,7 @@ export default function ApprovePage() {
 
         <details className="mt-6 text-sm">
           <summary className="cursor-pointer font-medium text-primary">Show exactly what PayPal receives</summary>
-          <pre className="mt-3 overflow-x-auto rounded-[14px] bg-page p-4 text-xs leading-relaxed text-ink-2">
-            {JSON.stringify(p, null, 2)}
-          </pre>
+          <PayPalSummary draft={draft} headline={HEADLINE[draft.action](amount, offer)} />
         </details>
 
         {d.past_due && !editing && (
@@ -178,6 +176,40 @@ export default function ApprovePage() {
         {error && <p className="mt-3 text-sm text-danger">{error}</p>}
       </Card>
     </div>
+  );
+}
+
+/** What approving sends, in plain words rather than the raw request. */
+function PayPalSummary({ draft, headline }: { draft: Draft; headline: string }) {
+  const p = draft.payload_json;
+  const rows: { label: string; value: React.ReactNode }[] = [{ label: "What happens", value: headline }];
+  if (draft.action === "provide_evidence") {
+    for (const e of p.evidences as any[]) {
+      const tracking = (e.evidence_info?.tracking_info ?? []).map((t: any) => `${t.carrier_name_other ?? t.carrier_name}, tracking ${t.tracking_number}`);
+      rows.push({
+        label: humanize(e.evidence_type),
+        value: (
+          <>
+            {e.notes}
+            {tracking.map((t: string) => <span key={t} className="mt-1 block text-muted">{t}</span>)}
+          </>
+        ),
+      });
+    }
+  } else if (p.note) {
+    rows.push({ label: "Note to PayPal", value: p.note });
+  }
+  rows.push({ label: "Files attached", value: draft.files.length ? draft.files.map((f) => f.filename).join(", ") : "None" });
+
+  return (
+    <dl className="mt-3 divide-y divide-ink/[0.06] rounded-[14px] bg-page px-5">
+      {rows.map((r) => (
+        <div key={r.label} className="grid gap-1 py-4 sm:grid-cols-[9rem_1fr] sm:gap-4">
+          <dt className="text-muted">{r.label}</dt>
+          <dd className="leading-relaxed text-ink">{r.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

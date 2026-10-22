@@ -34,7 +34,7 @@ function PayPalCard() {
 
   return (
     <Card>
-      <CardTitle action={<Pill tone={connected ? "cerulean" : "coral"}>{connected ? (status.test_mode ? "Test account" : "Connected") : "Not connected"}</Pill>}>
+      <CardTitle>
         PayPal account
       </CardTitle>
       {connected ? (
@@ -65,7 +65,7 @@ function PayPalCard() {
         </>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted">Connect PayPal so the agent can see and answer your disputes.</p>
+          <p className="text-sm text-muted">Connect PayPal so Bundo can see and answer your disputes.</p>
           <Button variant="primary" href="/onboarding">Connect PayPal</Button>
         </div>
       )}
@@ -90,7 +90,7 @@ function RefundLimitCard() {
   if (!rules)
     return message ? (
       <Card>
-        <CardTitle>Agent refund limit</CardTitle>
+        <CardTitle>Refund limit</CardTitle>
         <p className="text-sm text-danger">{message}</p>
       </Card>
     ) : null;
@@ -118,7 +118,7 @@ function RefundLimitCard() {
   return (
     <Card>
       <div id="agent" className="scroll-mt-24" />
-      <CardTitle>Agent refund limit</CardTitle>
+      <CardTitle>Refund limit</CardTitle>
 
       <label className="flex cursor-pointer items-center justify-between gap-6">
         <div>
@@ -157,7 +157,7 @@ function RefundLimitCard() {
       </div>
 
       <p className="mt-5 text-[13px] leading-relaxed text-muted">
-        Above this amount, the agent prepares a refund or reply and waits for you to approve it.
+        Above this amount, Bundo prepares a refund or reply and waits for you to approve it.
       </p>
 
       <div className="mt-5 flex items-center justify-end gap-3 border-t border-ink/[0.06] pt-5">
@@ -200,7 +200,9 @@ function StoreDataCard() {
     <Card>
       <div id="data" className="scroll-mt-24" />
       <CardTitle action={<Pill>Optional</Pill>}>Store data</CardTitle>
-      <p className="-mt-2 mb-5 text-sm leading-relaxed text-muted">Upload CSV exports so the agent can prove delivery and fight disputes you can win.</p>
+      <p className="-mt-2 mb-5 text-sm leading-relaxed text-muted">
+        PayPal only sees the payment. Upload CSV exports from your shop so Bundo can prove you shipped, spot mismatched tracking, and fight disputes you can win. Without them, Bundo only has PayPal&rsquo;s records and leans toward refunding.
+      </p>
       <ul className="divide-y divide-ink/[0.06]">
         {KINDS.map((k) => {
           const s = summary.find((x) => x.kind === k.kind);

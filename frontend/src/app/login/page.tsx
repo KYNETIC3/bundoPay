@@ -34,7 +34,7 @@ export default function LoginPage() {
         <span className="text-xl font-semibold tracking-tight">BundoPay</span>
       </div>
       <h1 className="text-[32px] font-semibold tracking-[-0.025em]">{mode === "signin" ? "Welcome back" : "Create your account"}</h1>
-      <p className="mt-2 text-sm text-muted">An agent that handles your PayPal disputes, within limits you set.</p>
+      <p className="mt-2 text-sm text-muted">Bundo handles your PayPal disputes, within limits you set.</p>
 
       <form onSubmit={submit} className="mt-8 space-y-4 rounded-[20px] bg-card p-7 shadow-card">
         <label className="block text-sm">

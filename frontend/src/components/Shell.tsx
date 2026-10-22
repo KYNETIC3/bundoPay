@@ -16,16 +16,16 @@ const BARE_PATHS = ["/login", "/onboarding", "/onboarding/return"];
 const NAV = [
   { href: "/", label: "Overview", icon: "dashboard" },
   { href: "/disputes", label: "Disputes", icon: "gavel" },
-  { href: "/agent", label: "Ask the agent", icon: "forum" },
+  { href: "/agent", label: "Ask Bundo", icon: "forum" },
   { href: "/settings", label: "Settings", icon: "tune" },
 ];
 
 const TITLES: [string, string, string][] = [
   ["/disputes/", "", ""],
   ["/disputes", "Disputes", "Everything PayPal has sent you, newest first."],
-  ["/agent", "Ask the agent", "The agent can explain cases and prepare refunds. You approve before money moves."],
-  ["/settings", "Settings", "Your PayPal connection, what the agent may do alone, and the store data it can use."],
-  ["/", "Overview", "What needs you, and what the agent has done."],
+  ["/agent", "Ask Bundo", "Bundo can explain cases and prepare refunds. You approve before money moves."],
+  ["/settings", "Settings", "Your PayPal connection, what Bundo may do on its own, and the store data it can use."],
+  ["/", "Overview", "What needs you, and what Bundo has done."],
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -140,23 +140,14 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
             )}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            {status && (
-              <Link
-                href="/settings"
-                className="hidden min-h-9 items-center gap-2 rounded-full bg-card px-3.5 text-[13px] text-ink-2 ring-1 ring-ink/[0.08] sm:flex"
-              >
-                <span className={`h-2 w-2 rounded-full ${connected ? "bg-aqua shadow-[0_0_0_3px_rgb(138_198_208/0.25)]" : "bg-coral"}`} />
-                PayPal: <b className="font-semibold text-ink">{connected ? (status.test_mode ? "Test account" : "Connected") : "Not connected"}</b>
-              </Link>
-            )}
             {connected && (
               <button
                 onClick={sync}
                 disabled={syncing}
                 className="inline-flex min-h-10 items-center gap-2 rounded-full bg-card px-[18px] text-sm font-semibold text-ink ring-1 ring-ink/[0.12] hover:bg-[#f7fafb] disabled:opacity-60"
               >
-                <Icon name="sync" className={`text-[18px] ${syncing ? "animate-spin" : ""}`} />
-                {syncing ? "Syncing" : "Sync"}
+                <Icon name="refresh" className={`text-[18px] ${syncing ? "animate-spin" : ""}`} />
+                {syncing ? "Refreshing" : "Refresh"}
               </button>
             )}
           </div>
@@ -185,7 +176,7 @@ function ConnectPrompt() {
     <div className="mx-auto max-w-md rounded-[20px] bg-card p-10 text-center shadow-card">
       <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-primary-fixed text-primary"><Icon name="link" className="text-[24px]" /></span>
       <h2 className="mt-4 text-xl font-semibold tracking-[-0.015em]">Connect your PayPal account</h2>
-      <p className="mt-2 text-sm leading-relaxed text-muted">BundoPay needs access to your PayPal disputes before the agent can help.</p>
+      <p className="mt-2 text-sm leading-relaxed text-muted">BundoPay needs access to your PayPal disputes before Bundo can help.</p>
       <Link href="/onboarding" className="mt-6 inline-flex min-h-10 items-center rounded-full bg-primary px-5 text-sm font-semibold text-white hover:bg-primary-container">
         Connect PayPal
       </Link>
