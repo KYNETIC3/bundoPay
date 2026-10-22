@@ -50,6 +50,19 @@ export function Button({ variant = "secondary", href, className = "", children, 
   return <button className={cls} {...rest}>{children}</button>;
 }
 
+/** Round submit arrow for chat inputs. Disabled keeps the arrow white on a lighter fill, so it never disappears. */
+export function SendButton({ disabled }: { disabled: boolean }) {
+  return (
+    <button
+      disabled={disabled}
+      aria-label="Send"
+      className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-ink text-white transition hover:bg-primary disabled:cursor-default disabled:bg-ink/25"
+    >
+      <Icon name="arrow_upward" className="text-[20px]" />
+    </button>
+  );
+}
+
 export function Empty({ icon, title, children }: { icon: string; title: string; children?: React.ReactNode }) {
   return (
     <div className="flex flex-col items-center gap-3 py-12 text-center">

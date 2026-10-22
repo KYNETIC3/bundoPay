@@ -23,7 +23,7 @@ const NAV = [
 const TITLES: [string, string, string][] = [
   ["/disputes/", "", ""],
   ["/disputes", "Disputes", "Everything PayPal has sent you, newest first."],
-  ["/agent", "Ask Bundo", "Bundo can explain cases and prepare refunds. You approve before money moves."],
+  ["/agent", "Ask Bundo", ""],
   ["/settings", "Settings", "Your PayPal connection, what Bundo may do on its own, and the store data it can use."],
   ["/", "Overview", "What needs you, and what Bundo has done."],
 ];

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 
-import { Button, Icon, Pill } from "@/components/ui";
+import { Button, Icon, Pill, SendButton } from "@/components/ui";
 import { api, json } from "@/lib/api";
 import { money } from "@/lib/format";
 import { agentState } from "@/lib/status";
@@ -72,15 +72,12 @@ function AgentChat() {
   }, [messages, busy]);
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-220px)] min-h-[480px] max-w-[820px] flex-col rounded-3xl bg-card shadow-card">
+    <div className="mx-auto flex h-[calc(100vh-220px)] min-h-[480px] max-w-[820px] flex-col rounded-3xl bg-card shadow-card ring-1 ring-ink/40">
       <div className="flex-1 space-y-6 overflow-y-auto p-6 sm:p-8">
         {messages.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-5 text-center">
             <span className="grid h-12 w-12 place-items-center rounded-full bg-ink text-ice"><Icon name="auto_awesome" /></span>
-            <div>
-              <p className="text-lg font-semibold">Ask Bundo about your disputes</p>
-              <p className="mt-1 text-sm text-muted">Try one of these, or ask in your own words.</p>
-            </div>
+            <p className="text-lg font-semibold">Ask Bundo about your disputes</p>
             <div className="flex flex-wrap justify-center gap-2">
               {SUGGESTIONS.map((s) => (
                 <button key={s} onClick={() => send(s)} className="min-h-9 rounded-full bg-soft px-3.5 text-[13px] font-medium text-ink-2 hover:bg-primary-fixed hover:text-ink">
@@ -122,13 +119,11 @@ function AgentChat() {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask in plain words…"
+          placeholder="Message Bundo"
           aria-label="Message Bundo"
-          className="min-h-12 min-w-0 flex-1 rounded-full bg-page px-5 text-[15px] ring-1 ring-inset ring-ink/[0.06] placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-aqua"
+          className="min-h-12 min-w-0 flex-1 rounded-full bg-card px-5 text-[15px] ring-1 ring-inset ring-ink/40 placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary"
         />
-        <Button variant="primary" disabled={busy || !input.trim()} aria-label="Send" className="h-11 w-11 shrink-0 px-0">
-          <Icon name="arrow_upward" className="text-[18px]" />
-        </Button>
+        <SendButton disabled={busy || !input.trim()} />
       </form>
     </div>
   );

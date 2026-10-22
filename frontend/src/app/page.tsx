@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { DisputeTable, unresolvedCount } from "@/components/DisputeTable";
-import { Button, Card, CardTitle, Empty, Icon, Pill } from "@/components/ui";
+import { Button, Card, CardTitle, Empty, Icon, Pill, SendButton } from "@/components/ui";
 import { money } from "@/lib/format";
 import { useLive } from "@/lib/hooks";
 import type { DisputeSummary } from "@/lib/types";
@@ -36,8 +36,8 @@ export default function OverviewPage() {
         <Kpi swatch="bg-muted" label="Due within 48h" value={o?.due_soon ?? "–"} note={o ? `${o.resolved} closed so far` : ""} />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <Card className="lg:col-span-8">
+      <div className="flex flex-col gap-6 lg:flex-row">
+        <Card className="min-w-0 flex-1">
           <CardTitle action={<Button variant="ghost" href="/disputes" className="min-h-8 text-[13px]">All disputes <Icon name="chevron_right" className="text-[16px]" /></Button>}>
             <span className="flex items-center gap-2">
               Open disputes
@@ -53,7 +53,7 @@ export default function OverviewPage() {
           )}
         </Card>
 
-        <AskCard />
+        <ChatToggle />
       </div>
     </>
   );
@@ -74,34 +74,55 @@ function Kpi({ swatch, label, value, note }: { swatch: string; label: string; va
   );
 }
 
-function AskCard() {
+/** A Bundo icon beside Open disputes that rolls out into a chat bar; sending opens the Ask Bundo page. */
+function ChatToggle() {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const input = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) input.current?.focus({ preventScroll: true });
+  }, [open]);
+
+  // The outer box stretches to the row's height so the bar can animate to 100% of it.
   return (
-    <Card className="flex flex-col bg-ink text-white shadow-lift lg:col-span-4">
-      <h2 className="flex items-center gap-2.5 text-[19px] font-semibold tracking-[-0.015em]">
-        <Icon name="forum" />
-        Ask Bundo
-      </h2>
-      <p className="mb-5 mt-2 text-sm leading-relaxed text-white/70">Ask about a case, or tell it what to refund. You approve before money moves.</p>
-      <form
-        className="mt-auto flex gap-2 rounded-full bg-white/10 p-1.5 ring-1 ring-inset ring-white/15 focus-within:ring-aqua"
-        onSubmit={(e) => {
-          e.preventDefault();
-          router.push(`/agent${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`);
-        }}
+    <div className="shrink-0">
+      <div
+        className={`flex flex-col overflow-hidden bg-card shadow-card ring-1 ring-ink/40 transition-all duration-300 ease-out motion-reduce:transition-none ${
+          open ? "h-[124px] w-full rounded-[20px] lg:h-full lg:w-[340px]" : "h-12 w-12 rounded-[24px]"
+        }`}
       >
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="e.g. Refund anything under $20"
-          aria-label="Question for Bundo"
-          className="min-w-0 flex-1 bg-transparent px-3 text-sm text-white placeholder:text-white/55 focus:outline-none"
-        />
-        <button className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-aqua text-ink hover:bg-ice" aria-label="Ask">
-          <Icon name="arrow_upward" className="text-[18px]" />
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          aria-label={open ? "Close chat" : "Ask Bundo"}
+          className="flex h-12 shrink-0 items-center gap-2.5 px-3 text-ink"
+        >
+          {/* shrink-0: the icon clips its overflow, so without it the hidden label squeezes it to nothing. */}
+          <Icon name="forum" className="shrink-0 text-[24px]" />
+          <span className={`shrink-0 whitespace-nowrap text-[15px] font-semibold transition-opacity duration-200 motion-reduce:transition-none ${open ? "opacity-100 delay-150" : "opacity-0"}`}>Bundo</span>
         </button>
-      </form>
-    </Card>
+        <form
+          inert={!open}
+          className={`mt-auto flex min-w-[280px] items-center gap-2 p-3 transition-opacity duration-200 motion-reduce:transition-none ${open ? "opacity-100 delay-150" : "opacity-0"}`}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (q.trim()) router.push(`/agent?q=${encodeURIComponent(q.trim())}`);
+          }}
+        >
+          <input
+            ref={input}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Message Bundo"
+            aria-label="Message Bundo"
+            className="min-h-11 min-w-0 flex-1 rounded-full bg-card px-4 text-sm text-ink ring-1 ring-inset ring-ink/40 placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+          <SendButton disabled={!q.trim()} />
+        </form>
+      </div>
+    </div>
   );
 }
