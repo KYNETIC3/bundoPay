@@ -3,13 +3,15 @@
 import { AllCommunityModule, ModuleRegistry, themeQuartz, type ColDef, type ICellRendererParams, type PostSortRowsParams } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import Link from "next/link";
+import { useMemo, useRef } from "react";
 
+import { api } from "@/lib/api";
 import { money } from "@/lib/format";
 import { agentState, disputeStatus } from "@/lib/status";
 import type { DisputeSummary } from "@/lib/types";
 
 import { Countdown } from "./Countdown";
-import { Button, Pill } from "./ui";
+import { Button, Icon, Pill } from "./ui";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -33,7 +35,9 @@ const theme = themeQuartz.withParams({
   cellHorizontalPadding: 16,
 });
 
-type Cell = ICellRendererParams<DisputeSummary>;
+/** What row buttons can do; passed to cells through the grid's context so the column defs stay static. */
+type Ctx = { act: (id: string, what: "clear" | "restore") => void };
+type Cell = ICellRendererParams<DisputeSummary, unknown, Ctx>;
 
 const isOpen = (d: DisputeSummary) => d.status !== "RESOLVED";
 
@@ -91,7 +95,7 @@ const columns: ColDef<DisputeSummary>[] = [
     colId: "age",
     valueGetter: (p) => (p.data ? ageDays(p.data) : null),
     width: 90,
-    cellRenderer: ({ data: d, value }: Cell) =>
+    cellRenderer: ({ data: d, value }: ICellRendererParams<DisputeSummary, number | null, Ctx>) =>
       d && (value == null ? (
         <span className="text-muted">—</span>
       ) : (
@@ -115,15 +119,28 @@ const columns: ColDef<DisputeSummary>[] = [
     headerName: "",
     colId: "action",
     sortable: false,
-    width: 100,
+    width: 200,
     cellClass: "flex items-center justify-end",
-    cellRenderer: ({ data: d }: Cell) => {
+    cellRenderer: ({ data: d, context }: Cell) => {
       if (!d) return null;
       const ready = d.draft_status === "awaiting_approval" && isOpen(d);
-      return ready ? (
-        <Button variant="primary" href={`/disputes/${d.id}/approve`} className="min-h-8 px-3.5 text-[13px]">Review</Button>
-      ) : (
-        <Button href={`/disputes/${d.id}`} className="min-h-8 px-3.5 text-[13px]">Open</Button>
+      return (
+        <div className="inline-flex items-center gap-1.5">
+          {d.cleared ? (
+            <Button onClick={() => context.act(d.id, "restore")} variant="ghost" className="min-h-8 text-[13px]">
+              <Icon name="unarchive" className="text-[16px]" /> Restore
+            </Button>
+          ) : d.clearable ? (
+            <Button onClick={() => context.act(d.id, "clear")} variant="ghost" className="min-h-8 text-[13px]">
+              <Icon name="inventory_2" className="text-[16px]" /> Clear
+            </Button>
+          ) : null}
+          {ready ? (
+            <Button variant="primary" href={`/disputes/${d.id}/approve`} className="min-h-8 px-3.5 text-[13px]">Review</Button>
+          ) : (
+            <Button href={`/disputes/${d.id}`} className="min-h-8 px-3.5 text-[13px]">Open</Button>
+          )}
+        </div>
       );
     },
   },
@@ -136,13 +153,34 @@ function unresolvedFirst({ nodes }: PostSortRowsParams<DisputeSummary>) {
   nodes.splice(0, nodes.length, ...open, ...closed);
 }
 
-export function DisputeTable({ items }: { items: DisputeSummary[] }) {
+export function DisputeTable({ items, onChanged }: { items: DisputeSummary[]; onChanged?: () => void }) {
+  const changed = useRef(onChanged);
+  changed.current = onChanged;
+  const pending = useRef(new Set<string>());
+  // Stable, because the grid reads its context once.
+  const context = useMemo<Ctx>(
+    () => ({
+      act: async (id, what) => {
+        if (pending.current.has(id)) return;
+        pending.current.add(id);
+        try {
+          await api(`/disputes/${id}/${what}`, { method: "POST" });
+          changed.current?.();
+          window.dispatchEvent(new CustomEvent("disputes-synced"));
+        } finally {
+          pending.current.delete(id);
+        }
+      },
+    }),
+    [],
+  );
   return (
     <div className="-mx-7">
       <AgGridReact<DisputeSummary>
         theme={theme}
         rowData={items}
         columnDefs={columns}
+        context={context}
         defaultColDef={{ sortable: true, resizable: false, suppressMovable: true, cellClass: "flex items-center" }}
         getRowId={(p) => p.data.id}
         postSortRows={unresolvedFirst}

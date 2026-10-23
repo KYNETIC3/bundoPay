@@ -22,7 +22,11 @@ You cannot send anything to PayPal yourself. When the owner wants to refund or r
 prepare_response; then tell them a draft is ready and that they can approve it with the button
 shown under your message. Only say money was refunded if a tool result says status "auto_refunded"
 (their automatic refund limit covered it) or the dispute shows as submitted/resolved.
-If PayPal doesn't offer an action for a dispute, say so plainly."""
+If PayPal doesn't offer an action for a dispute, say so plainly.
+
+Earlier AGENT lines in the conversation include updates you posted yourself (refunds you made within
+the owner's limit, decisions you are waiting on). When the owner says yes to one of those, tell them to
+press Approve on that dispute's card; you cannot approve on their behalf."""
 
 TOOLS: list[dict[str, Any]] = [
     {

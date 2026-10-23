@@ -14,6 +14,7 @@ from app.config import get_settings
 from app.db import connection
 
 bearer = HTTPBearer(auto_error=False)
+_known_merchants: set[UUID] = set()
 
 
 @dataclass
@@ -44,9 +45,11 @@ async def current_merchant(creds: HTTPAuthorizationCredentials | None = Depends(
     except jwt.PyJWTError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid session") from exc
     merchant = CurrentMerchant(id=UUID(claims["sub"]), email=claims.get("email", ""))
-    async with connection() as conn:
-        await conn.execute(
-            "insert into merchants (id, email) values (%s, %s) on conflict (id) do nothing",
-            (merchant.id, merchant.email),
-        )
+    if merchant.id not in _known_merchants:  # create the row once per process, not on every request
+        async with connection() as conn:
+            await conn.execute(
+                "insert into merchants (id, email) values (%s, %s) on conflict (id) do nothing",
+                (merchant.id, merchant.email),
+            )
+        _known_merchants.add(merchant.id)
     return merchant

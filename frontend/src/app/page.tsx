@@ -25,7 +25,7 @@ export default function OverviewPage() {
   const { data: disputes, error: disputesError } = useLive<DisputeSummary[]>("/disputes");
   const open = (disputes ?? []).filter((d) => d.status !== "RESOLVED");
   const waiting = open.filter((d) => d.draft_status === "awaiting_approval").length;
-  const needsAction = open.filter((d) => d.status === "WAITING_FOR_SELLER_RESPONSE" || d.draft_status === "awaiting_approval").length;
+  const needsAction = open.filter((d) => (d.status === "WAITING_FOR_SELLER_RESPONSE" && d.draft_status !== "submitted") || d.draft_status === "awaiting_approval").length;
   const cur = o?.currency ?? "USD";
 
   return (

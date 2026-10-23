@@ -60,6 +60,20 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
   const [syncing, setSyncing] = useState(false);
   const [reconnect, setReconnect] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    const check = () => api<{ count: number }>("/agent/unread").then((r) => setUnread(r.count)).catch(() => {});
+    check();
+    const t = setInterval(check, 20_000);
+    const onRead = () => setUnread(0);
+    window.addEventListener("agent-read", onRead);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("agent-read", onRead);
+    };
+  }, []);
   const [, title, subtitle] = TITLES.find(([p]) => (p === "/" ? pathname === "/" : pathname.startsWith(p))) ?? ["", "BundoPay", ""];
   // Dispute pages carry their own heading; the header only offers a way back.
   const back = pathname.endsWith("/approve")
@@ -78,10 +92,19 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
   async function sync() {
     setSyncing(true);
     setSyncError(null);
+    setSyncResult(null);
     try {
-      await api("/disputes/sync", { method: "POST" });
+      const r = await api<{ updated: number; total: number }>("/disputes/sync", { method: "POST" });
       await refresh();
       window.dispatchEvent(new CustomEvent("disputes-synced"));
+      const at = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      setSyncResult(
+        r.updated > 0
+          ? `Refreshed at ${at}: ${r.updated} dispute${r.updated === 1 ? "" : "s"} updated from PayPal.`
+          : r.total > 0
+            ? `Refreshed at ${at}: everything is up to date.`
+            : `Refreshed at ${at}: PayPal has no disputes on this account.`,
+      );
     } catch (e) {
       setSyncError((e as Error).message);
     } finally {
@@ -111,6 +134,11 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
               >
                 <Icon name={n.icon} />
                 <span className="hidden md:inline">{n.label}</span>
+                {n.href === "/agent" && unread > 0 && (
+                  <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-ink px-1.5 text-[11px] font-semibold tabular-nums text-white" aria-label={`${unread} new`}>
+                    {unread}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -163,6 +191,12 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
           <div className="flex items-center justify-between gap-4 rounded-2xl bg-danger-soft px-5 py-4 text-sm">
             <span>Couldn&rsquo;t refresh from PayPal: {syncError}</span>
             <button onClick={() => setSyncError(null)} className="font-semibold text-danger">Dismiss</button>
+          </div>
+        )}
+        {syncResult && (
+          <div className="flex items-center justify-between gap-4 rounded-2xl bg-card px-5 py-4 text-sm shadow-card">
+            <span className="flex items-center gap-2"><Icon name="check_circle" className="text-primary" />{syncResult}</span>
+            <button onClick={() => setSyncResult(null)} className="font-semibold text-muted">Dismiss</button>
           </div>
         )}
         {status && !connected && pathname !== "/settings" ? <ConnectPrompt /> : children}

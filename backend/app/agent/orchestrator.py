@@ -24,6 +24,13 @@ from app.disputes.sync import upsert_dispute
 from .assemble import assemble, payload_hash
 from .evidence import EvidenceMap, build_evidence_map, gather
 from .llm import LLM, GeminiLLM, parse_json_object
+from .messages import (
+    compose_auto_refund,
+    compose_decision,
+    compose_no_action,
+    compose_past_due,
+)
+from .messages import post as post_message
 from .prompts import SYSTEM_PROMPT
 from .recommend import (
     DisallowedActionError,
@@ -139,6 +146,10 @@ async def run_agent(dispute_id: UUID, *, acknowledge_past_due: bool = False, llm
         async with connection() as c:
             await audit(c, name, merchant_id=merchant_id, dispute_id=dispute_id, data=data)
 
+    async def tell(content: str, *, kind: str, draft_id: Any = None) -> None:
+        async with connection() as c:
+            await post_message(c, merchant_id, content, kind=kind, dispute_id=dispute_id, draft_id=draft_id)
+
     if row["grant_status"] != "granted":
         await event("agent.skipped", {"why": "paypal_not_connected"})
         return {"status": "reconnect_required"}
@@ -156,6 +167,12 @@ async def run_agent(dispute_id: UUID, *, acknowledge_past_due: bool = False, llm
         return {"status": "not_actionable", "paypal_status": facts.status}
     if facts.is_past_due() and not acknowledge_past_due:
         await event("agent.past_due_blocked", {"due": facts.due_date.isoformat()})
+        async with connection() as conn:
+            cur = await conn.execute(
+                "select 1 from agent_messages where dispute_id = %s and kind = 'past_due' limit 1", (dispute_id,)
+            )
+            if not await cur.fetchone():
+                await post_message(conn, merchant_id, compose_past_due(facts), kind="past_due", dispute_id=dispute_id)
         return {"status": "past_due", "due_date": facts.due_date.isoformat()}
 
     async def tool_audit(name: str, args: dict[str, Any], result: dict[str, Any]) -> None:
@@ -234,7 +251,19 @@ async def run_agent(dispute_id: UUID, *, acknowledge_past_due: bool = False, llm
             submitted = await approve_by_policy(merchant_id, draft_id, policy)
         except Exception as exc:
             await event("agent.auto_refund_failed", {"draft_id": str(draft_id), "error": f"{type(exc).__name__}: {exc}"})
-            return result
-        return {**result, "status": "auto_refunded", "paypal_status": submitted.status_after}
-    # STOP: anything outside the merchant's rule waits for their approval. The agent cannot submit.
+        else:
+            await tell(compose_auto_refund(facts, policy.limit, submitted.status_after), kind="auto_refund", draft_id=draft_id)
+            return {**result, "status": "auto_refunded", "paypal_status": submitted.status_after}
+
+    # STOP: anything outside the merchant's rule waits for their approval. The agent cannot submit,
+    # so it tells the merchant what it found and what it recommends.
+    if spec:
+        offer = spec.payload.get("offer_amount", {}).get("value") if spec.action == "make_offer" else None
+        await tell(
+            compose_decision(facts, spec.action, rec.reasons, policy.enabled, policy.limit, offer),
+            kind="decision",
+            draft_id=draft_id,
+        )
+    else:
+        await tell(compose_no_action(facts, rec.reasons), kind="info")
     return result
