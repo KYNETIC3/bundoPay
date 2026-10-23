@@ -12,7 +12,7 @@ import type { DisputeDetail } from "@/lib/types";
 
 const EVENT_LABELS: Record<string, string> = {
   "dispute.new_work_item": "PayPal asked for a response",
-  "agent.recommendation": "Agent reviewed the case",
+  "agent.recommendation": "Bundo reviewed the case",
   "agent.draft_ready": "Draft ready for you",
   "agent.past_due_blocked": "Paused: deadline passed",
   "draft.edited": "You edited the draft",
@@ -89,27 +89,27 @@ export default function DisputePage() {
   ].sort((x, y) => x.at.localeCompare(y.at));
 
   return (
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-      <div className="space-y-5 lg:col-span-8">
+    <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
+      <div className="space-y-6 lg:col-span-8">
         <Card>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="font-mono text-[11px] text-muted">{d.paypal_dispute_id}</p>
-              <h2 className="mt-1 text-2xl font-bold tracking-tight">{d.reason_label}</h2>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
+              <p className="text-[13px] text-muted">{d.paypal_dispute_id}</p>
+              <h1 className="mt-1 text-[32px] font-semibold leading-tight tracking-[-0.025em]">{d.reason_label}</h1>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
                 <Pill tone={s.tone}>{s.label}</Pill>
                 <Pill tone={a.tone}>{a.label}</Pill>
                 {d.status !== "RESOLVED" && <Countdown due={d.due_date} />}
               </div>
             </div>
-            <div className="flex flex-col items-end gap-2">
-              <div className="font-mono text-3xl font-bold tabular-nums">{money(d.amount, d.currency)}</div>
+            <div className="flex flex-col items-end gap-3">
+              <div className="text-[32px] font-semibold tracking-[-0.02em] tabular-nums">{money(d.amount, d.currency)}</div>
               {d.cleared ? (
-                <Button onClick={() => setCleared(false)} disabled={busy} className="px-2.5 py-1 text-xs">
+                <Button onClick={() => setCleared(false)} disabled={busy} className="min-h-8 px-3.5 text-[13px]">
                   <Icon name="unarchive" className="text-[16px]" /> Restore
                 </Button>
               ) : (d.status === "RESOLVED" || draft?.status === "submitted") ? (
-                <Button onClick={() => setCleared(true)} disabled={busy} className="px-2.5 py-1 text-xs">
+                <Button onClick={() => setCleared(true)} disabled={busy} className="min-h-8 px-3.5 text-[13px]">
                   <Icon name="inventory_2" className="text-[16px]" /> Clear
                 </Button>
               ) : null}
@@ -117,10 +117,10 @@ export default function DisputePage() {
           </div>
         </Card>
 
-        {message && <div className="rounded-xl border border-line bg-card px-4 py-3 text-sm">{message}</div>}
+        {message && <div className="rounded-2xl bg-card px-5 py-4 text-sm shadow-card">{message}</div>}
 
         {d.past_due && d.status !== "RESOLVED" && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-danger-soft px-5 py-4 text-sm">
             <span><b>Deadline passed</b> on {dateTime(d.due_date)}. PayPal may not accept a response.</span>
             {actionable && !d.evidence_map && <Button onClick={() => analyze(true)} disabled={busy}>Review anyway</Button>}
           </div>
@@ -133,22 +133,22 @@ export default function DisputePage() {
           </Card>
         )}
 
-        <Card className="border-cream-line bg-cream">
+        <Card className="bg-ink text-white shadow-lift">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ink-2">
-                <Icon name="smart_toy" className="text-[16px]" /> Agent recommends
+              <p className="flex items-center gap-1.5 text-[13px] font-medium text-white/65">
+                <Icon name="auto_awesome" className="text-[16px]" /> Bundo recommends
               </p>
-              <h3 className="mt-1 text-2xl font-bold tracking-tight">{rec ? headline : actionable ? "Not reviewed yet" : "Nothing to do"}</h3>
+              <h3 className="mt-1.5 text-[26px] font-semibold tracking-[-0.02em]">{rec ? headline : actionable ? "Not reviewed yet" : "Nothing to do"}</h3>
             </div>
             <div className="flex flex-wrap gap-2">
               {draft && ["awaiting_approval", "failed"].includes(draft.status) && (
-                <Button variant="primary" href={`/disputes/${d.id}/approve`}>
-                  Review &amp; approve <Icon name="arrow_forward" className="text-[18px]" />
+                <Button variant="primary" href={`/disputes/${d.id}/approve`} className="bg-aqua text-ink hover:bg-ice">
+                  Review and approve
                 </Button>
               )}
               {actionable && !d.past_due && (
-                <Button onClick={() => analyze()} disabled={busy}>
+                <Button onClick={() => analyze()} disabled={busy} className="bg-white/10 text-white ring-white/20 hover:bg-white/20">
                   <Icon name={busy ? "progress_activity" : "refresh"} className={`text-[18px] ${busy ? "animate-spin" : ""}`} />
                   {busy ? "Reviewing" : rec ? "Check again" : "Review now"}
                 </Button>
@@ -156,42 +156,42 @@ export default function DisputePage() {
             </div>
           </div>
           {rec && rec.reasons.length > 0 && (
-            <ul className="mt-4 space-y-1.5 text-sm text-ink-2">
+            <ul className="mt-5 space-y-2 text-sm leading-relaxed text-white/80">
               {rec.reasons.slice(0, 3).map((r, i) => (
-                <li key={i} className="flex gap-2"><Icon name="check" className="text-[16px] text-primary" />{r}</li>
+                <li key={i} className="flex gap-2"><Icon name="check" className="mt-0.5 text-[16px] text-aqua" />{r}</li>
               ))}
             </ul>
           )}
           {draft?.status === "submitted" && d.status !== "RESOLVED" && (
-            <p className="mt-4 text-sm text-ink-2">Sent to PayPal. This page updates on its own until the dispute closes.</p>
+            <p className="mt-5 text-sm text-white/80">Sent to PayPal. This page updates on its own until the dispute closes.</p>
           )}
         </Card>
 
         {d.evidence_map && (
           <Card>
             <details>
-              <summary className="flex cursor-pointer list-none items-center justify-between font-semibold">
-                <span>What PayPal asked for</span>
+              <summary className="flex cursor-pointer list-none items-center justify-between">
+                <span className="text-[19px] font-semibold tracking-[-0.015em]">What PayPal asked for</span>
                 <span className="flex items-center gap-2 text-sm font-normal text-muted">
                   {gaps.length ? `${gaps.length} missing` : "All found"}
                   <Icon name="expand_more" />
                 </span>
               </summary>
-              <ul className="mt-4 divide-y divide-line">
+              <ul className="mt-5 divide-y divide-ink/[0.06]">
                 {d.evidence_map.rows_json.map((r, i) => {
                   const ok = r.satisfying_record && !r.gap_or_conflict;
                   return (
-                    <li key={i} className="flex items-start gap-3 py-2.5 text-sm">
+                    <li key={i} className="flex items-start gap-4 py-4 text-sm leading-relaxed first:pt-0">
                       <Icon name={ok ? "check_circle" : "error"} className={ok ? "text-primary" : "text-coral"} />
                       <div>
-                        <div className="font-medium">{humanize(r.requested_evidence_type)}</div>
+                        <div className="font-semibold">{humanize(r.requested_evidence_type)}</div>
                         <div className="text-muted">{r.satisfying_record ?? r.gap_or_conflict ?? "Not found"}</div>
                       </div>
                     </li>
                   );
                 })}
                 {d.evidence_map.integrity_flags.filter((f) => f.severity === "high").map((f, i) => (
-                  <li key={`f${i}`} className="flex items-start gap-3 py-2.5 text-sm">
+                  <li key={`f${i}`} className="flex items-start gap-4 py-4 text-sm">
                     <Icon name="warning" className="text-danger" />
                     <span>{f.detail}</span>
                   </li>
@@ -202,21 +202,22 @@ export default function DisputePage() {
         )}
       </div>
 
-      <div className="space-y-5 lg:col-span-4">
-        <Card className="border-ink bg-ink text-white">
-          <p className="font-semibold">Questions about this dispute?</p>
-          <Button href={`/agent?q=${encodeURIComponent(`Tell me about dispute ${d.paypal_dispute_id}`)}`} className="mt-3 w-full border-white/20 bg-white/10 text-white hover:bg-white/20">
-            <Icon name="smart_toy" className="text-[18px]" /> Ask the agent
+      <div className="space-y-6 lg:col-span-4">
+        <Card>
+          <h2 className="text-[19px] font-semibold tracking-[-0.015em]">Questions about this dispute?</h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted">Bundo can explain its reasoning and what PayPal needs.</p>
+          <Button href={`/agent?q=${encodeURIComponent(`Tell me about dispute ${d.paypal_dispute_id}`)}`} className="mt-5 w-full">
+            <Icon name="forum" className="text-[18px]" /> Ask Bundo
           </Button>
         </Card>
         <Card>
           <CardTitle>Timeline</CardTitle>
-          <ol className="relative ml-1.5 space-y-3 border-l border-line pl-4">
+          <ol className="relative ml-1.5 space-y-6 border-l border-ink/10 pl-5">
             {timeline.map((t, i) => (
               <li key={i} className="relative text-sm">
-                <span className={`absolute -left-[21px] top-1.5 h-2 w-2 rounded-full ${t.deadline ? "bg-coral" : "bg-line-strong"}`} />
-                <div className="font-medium">{t.label}</div>
-                <div className="font-mono text-[11px] text-muted">{dateTime(t.at)}</div>
+                <span className={`absolute -left-[25px] top-1 h-2.5 w-2.5 rounded-full ${t.deadline ? "bg-coral" : i === timeline.length - 1 ? "bg-aqua shadow-[0_0_0_4px_rgb(138_198_208/0.25)]" : "bg-[#c9d3dc]"}`} />
+                <div className="font-semibold">{t.label}</div>
+                <div className="mt-0.5 text-[13px] text-muted">{dateTime(t.at)}</div>
               </li>
             ))}
           </ol>

@@ -36,11 +36,11 @@ export default function ApprovePage() {
   if (done) {
     const after = disputeStatus(done.status_after);
     return (
-      <Card className="mx-auto max-w-lg text-center">
-        <Icon name="check_circle" className="text-[44px] text-primary" />
-        <h2 className="mt-2 text-2xl font-bold">Sent to PayPal</h2>
-        <p className="mt-2 text-sm text-muted">PayPal now shows this dispute as</p>
-        <div className="mt-2"><Pill tone={after.tone}>{after.label}</Pill></div>
+      <Card className="mx-auto max-w-[720px] px-8 py-14 text-center">
+        <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-primary-fixed text-primary"><Icon name="check" className="text-[30px]" /></span>
+        <h2 className="mt-5 text-2xl font-semibold tracking-[-0.02em]">Sent to PayPal</h2>
+        <p className="mt-2 text-[15px] text-muted">PayPal now shows this dispute as</p>
+        <div className="mt-3"><Pill tone={after.tone}>{after.label}</Pill></div>
         <Button href={`/disputes/${id}`} className="mt-6">Back to dispute</Button>
       </Card>
     );
@@ -50,7 +50,7 @@ export default function ApprovePage() {
   const draft = d.draft;
   if (!draft || !["awaiting_approval", "failed"].includes(draft.status))
     return (
-      <Card className="mx-auto max-w-lg text-center">
+      <Card className="mx-auto max-w-[720px] px-8 py-14 text-center">
         <p className="text-muted">Nothing is waiting for your approval on this dispute.</p>
         <Button href={`/disputes/${id}`} className="mt-4">Back to dispute</Button>
       </Card>
@@ -92,29 +92,25 @@ export default function ApprovePage() {
   const removeFile = (sha: string) => run(async () => { await api(`/drafts/${draft.id}/files/${sha}`, { method: "DELETE" }); await load(); });
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
-      <Link href={`/disputes/${id}`} className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
-        <Icon name="arrow_back" className="text-[18px]" /> {d.reason_label}
-      </Link>
-
+    <div className="mx-auto max-w-[720px] space-y-6">
       <Card className="p-6 sm:p-8">
-        <p className="text-xs font-bold uppercase tracking-wider text-muted">Your approval</p>
-        <h2 className="mt-1 text-3xl font-bold tracking-tight">{HEADLINE[draft.action](amount, offer)}</h2>
+        <p className="text-[13px] text-muted">Your approval</p>
+        <h1 className="mt-1.5 text-[32px] font-semibold leading-tight tracking-[-0.025em]">{HEADLINE[draft.action](amount, offer)}</h1>
         <p className="mt-2 text-sm text-muted">
-          Dispute <span className="font-mono">{d.paypal_dispute_id}</span> · respond by {dateTime(d.due_date)}
+          {d.reason_label}, {d.paypal_dispute_id}. Respond by {dateTime(d.due_date)}.
         </p>
 
-        {notice && <p className="mt-4 rounded-lg bg-primary-fixed/50 px-3 py-2 text-sm">{notice}</p>}
+        {notice && <p className="mt-5 rounded-[14px] bg-primary-fixed px-4 py-3 text-sm">{notice}</p>}
 
-        <div className="mt-6 space-y-3">
+        <div className="mt-7 space-y-3 border-t border-ink/[0.06] pt-7">
           {editing ? (
             <EditForm draft={draft} value={editing} onChange={setEditing} />
           ) : draft.action === "provide_evidence" ? (
             (p.evidences as any[]).map((e) => (
-              <div key={e.evidence_type} className="rounded-xl border border-line p-4">
+              <div key={e.evidence_type} className="rounded-[14px] bg-page p-5">
                 <div className="font-semibold">{humanize(e.evidence_type)}</div>
                 {e.evidence_info?.tracking_info?.map((t: any) => (
-                  <div key={t.tracking_number} className="mt-1 font-mono text-xs text-muted">
+                  <div key={t.tracking_number} className="mt-1 text-xs text-muted">
                     {t.carrier_name_other ?? t.carrier_name} · {t.tracking_number}
                   </div>
                 ))}
@@ -133,15 +129,15 @@ export default function ApprovePage() {
               </div>
             ))
           ) : (
-            <div className="rounded-xl border border-line p-4">
-              <div className="text-xs font-bold uppercase tracking-wider text-muted">Note to PayPal</div>
-              <p className="mt-1 text-sm">{p.note}</p>
+            <div className="rounded-[14px] bg-page p-5">
+              <div className="text-[15px] font-semibold">Note to PayPal</div>
+              <p className="mt-2 text-sm leading-relaxed text-ink-2">{p.note}</p>
             </div>
           )}
         </div>
 
         {draft.missing_items.length > 0 && !editing && (
-          <details className="mt-4 rounded-xl bg-danger-soft px-4 py-3 text-sm">
+          <details className="mt-4 rounded-[14px] bg-danger-soft px-5 py-4 text-sm">
             <summary className="cursor-pointer font-semibold text-danger">{draft.missing_items.length} thing(s) we couldn&rsquo;t find</summary>
             <ul className="mt-2 list-disc space-y-1 pl-5">
               {draft.missing_items.map((m, i) => <li key={i}>{m.evidence_type && `${humanize(m.evidence_type)}: `}{m.detail}</li>)}
@@ -149,11 +145,9 @@ export default function ApprovePage() {
           </details>
         )}
 
-        <details className="mt-4 text-sm">
-          <summary className="cursor-pointer text-muted">Show exactly what PayPal receives</summary>
-          <pre className="mt-2 overflow-x-auto rounded-lg border border-line bg-soft p-3 font-mono text-[11px] leading-relaxed">
-            {JSON.stringify(p, null, 2)}
-          </pre>
+        <details className="mt-6 text-sm">
+          <summary className="cursor-pointer font-medium text-primary">Show exactly what PayPal receives</summary>
+          <PayPalSummary draft={draft} headline={HEADLINE[draft.action](amount, offer)} />
         </details>
 
         {d.past_due && !editing && (
@@ -163,7 +157,7 @@ export default function ApprovePage() {
           </label>
         )}
 
-        <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-line pt-5">
+        <div className="mt-7 flex flex-wrap items-center gap-3 border-t border-ink/[0.06] pt-7">
           {editing ? (
             <>
               <Button variant="primary" onClick={save} disabled={busy}>Save changes</Button>
@@ -172,7 +166,7 @@ export default function ApprovePage() {
           ) : (
             <>
               <Button variant="primary" onClick={approve} disabled={busy || (d.past_due && !ackLate)}>
-                <Icon name="check" className="text-[18px]" /> {busy ? "Sending" : "Approve"}
+                {busy ? "Sending" : "Approve and send"}
               </Button>
               <Button onClick={() => setEditing(structuredClone(p))} disabled={busy}>Edit</Button>
               <Button variant="ghost" onClick={reject} disabled={busy} className="text-danger">Decline</Button>
@@ -185,8 +179,42 @@ export default function ApprovePage() {
   );
 }
 
+/** What approving sends, in plain words rather than the raw request. */
+function PayPalSummary({ draft, headline }: { draft: Draft; headline: string }) {
+  const p = draft.payload_json;
+  const rows: { label: string; value: React.ReactNode }[] = [{ label: "What happens", value: headline }];
+  if (draft.action === "provide_evidence") {
+    for (const e of p.evidences as any[]) {
+      const tracking = (e.evidence_info?.tracking_info ?? []).map((t: any) => `${t.carrier_name_other ?? t.carrier_name}, tracking ${t.tracking_number}`);
+      rows.push({
+        label: humanize(e.evidence_type),
+        value: (
+          <>
+            {e.notes}
+            {tracking.map((t: string) => <span key={t} className="mt-1 block text-muted">{t}</span>)}
+          </>
+        ),
+      });
+    }
+  } else if (p.note) {
+    rows.push({ label: "Note to PayPal", value: p.note });
+  }
+  rows.push({ label: "Files attached", value: draft.files.length ? draft.files.map((f) => f.filename).join(", ") : "None" });
+
+  return (
+    <dl className="mt-3 divide-y divide-ink/[0.06] rounded-[14px] bg-page px-5">
+      {rows.map((r) => (
+        <div key={r.label} className="grid gap-1 py-4 sm:grid-cols-[9rem_1fr] sm:gap-4">
+          <dt className="text-muted">{r.label}</dt>
+          <dd className="leading-relaxed text-ink">{r.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function EditForm({ draft, value, onChange }: { draft: Draft; value: Record<string, any>; onChange: (v: Record<string, any>) => void }) {
-  const field = "w-full rounded-lg border border-line-strong px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-container";
+  const field = "w-full rounded-[14px] bg-page px-4 py-3 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-aqua";
   if (draft.action !== "provide_evidence")
     return (
       <div className="space-y-3">

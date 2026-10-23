@@ -2,18 +2,24 @@
 
 import { useState } from "react";
 
-import { DisputeTable } from "@/components/DisputeTable";
-import { Button, Card, Empty, Icon } from "@/components/ui";
+import { DisputeTable, unresolvedCount } from "@/components/DisputeTable";
+import { Button, Card, Empty, Icon, Pill } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useLive } from "@/lib/hooks";
 import type { DisputeSummary } from "@/lib/types";
 
-const FILTERS: { key: string; label: string; test: (d: DisputeSummary) => boolean; on: string; off: string }[] = [
-  { key: "all", label: "All", test: () => true, on: "bg-ink text-white", off: "border border-line-strong bg-card" },
-  { key: "you", label: "Needs you", test: (d) => d.status === "WAITING_FOR_SELLER_RESPONSE" && d.draft_status !== "submitted", on: "bg-coral text-white", off: "border-2 border-coral bg-card" },
-  { key: "ready", label: "Ready to approve", test: (d) => d.draft_status === "awaiting_approval" && d.status !== "RESOLVED", on: "bg-plum text-white", off: "border-2 border-plum bg-card" },
-  { key: "finished", label: "Finished", test: (d) => !!d.clearable, on: "bg-steel text-white", off: "border-2 border-steel bg-card" },
+const FILTERS: { key: string; label: string; test: (d: DisputeSummary) => boolean }[] = [
+  { key: "all", label: "All", test: () => true },
+  { key: "you", label: "Needs you", test: (d) => d.status === "WAITING_FOR_SELLER_RESPONSE" && d.draft_status !== "submitted" },
+  { key: "ready", label: "Ready to approve", test: (d) => d.draft_status === "awaiting_approval" && d.status !== "RESOLVED" },
+  { key: "paypal", label: "With PayPal or buyer", test: (d) => ["UNDER_REVIEW", "WAITING_FOR_BUYER_RESPONSE", "OPEN"].includes(d.status) },
+  { key: "finished", label: "Finished", test: (d) => !!d.clearable },
 ];
+
+const tab = (on: boolean) =>
+  `inline-flex min-h-[34px] items-center gap-2 rounded-full px-4 text-[13px] transition ${
+    on ? "bg-card font-semibold text-ink shadow-[0_1px_3px_rgb(54_33_62/0.1)]" : "font-medium text-ink-2 hover:text-ink"
+  }`;
 
 export default function DisputesPage() {
   const { data, error, reload } = useLive<DisputeSummary[]>("/disputes");
@@ -42,34 +48,40 @@ export default function DisputesPage() {
 
   return (
     <Card>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div role="tablist" aria-label="Filter disputes" className="flex flex-wrap gap-2">
-          {FILTERS.map((f) => {
-            const on = !showCleared && f.key === filter;
-            return (
-              <button key={f.key} role="tab" aria-selected={on}
-                onClick={() => { setShowCleared(false); setFilter(f.key); }}
-                className={`rounded-full px-4 py-1 text-xs font-bold tracking-wide transition active:scale-95 ${on ? f.on : f.off}`}>
-                {f.label} ({(data ?? []).filter(f.test).length})
-              </button>
-            );
-          })}
-          <button role="tab" aria-selected={showCleared} onClick={() => setShowCleared(true)}
-            className={`rounded-full px-4 py-1 text-xs font-bold tracking-wide transition active:scale-95 ${showCleared ? "bg-muted text-white" : "border border-line-strong bg-card"}`}>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div role="tablist" aria-label="Filter disputes" className="inline-flex flex-wrap gap-1 rounded-full bg-soft p-1">
+          {FILTERS.map((f) => (
+            <button
+              key={f.key}
+              role="tab"
+              aria-selected={!showCleared && f.key === filter}
+              onClick={() => {
+                setShowCleared(false);
+                setFilter(f.key);
+              }}
+              className={tab(!showCleared && f.key === filter)}
+            >
+              {f.label}<span className="text-xs text-muted tabular-nums">{(data ?? []).filter(f.test).length}</span>
+            </button>
+          ))}
+          <button role="tab" aria-selected={showCleared} onClick={() => setShowCleared(true)} className={tab(showCleared)}>
             Cleared
           </button>
         </div>
-        {!showCleared && finished > 0 && (
-          <Button onClick={clearFinished} disabled={busy} className="text-xs">
-            <Icon name="inventory_2" className="text-[16px]" /> Clear all finished ({finished})
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          {!showCleared && finished > 0 && (
+            <Button onClick={clearFinished} disabled={busy} className="min-h-8 px-3.5 text-[13px]">
+              <Icon name="inventory_2" className="text-[16px]" /> Clear all finished ({finished})
+            </Button>
+          )}
+          {data && <Pill tone={unresolvedCount(data) ? "coral" : "soft"}>{unresolvedCount(data)} unresolved</Pill>}
+        </div>
       </div>
 
       {(error || cleared.error) && <p className="text-sm text-danger">{error ?? cleared.error}</p>}
       {(showCleared ? cleared.data : data) && items.length === 0 ? (
-        <Empty icon={showCleared ? "inventory_2" : "inbox"} title={showCleared ? "Nothing cleared" : filter === "all" ? "No disputes" : "Nothing here"}>
-          {!showCleared && filter === "all" && "When a buyer opens a dispute on PayPal, it appears here within 15 minutes, or right away if you press Sync."}
+        <Empty icon={showCleared ? "inventory_2" : "inbox"} title={showCleared ? "Nothing cleared" : filter === "all" ? "No disputes yet" : "Nothing here"}>
+          {!showCleared && filter === "all" && "When a buyer opens a dispute on PayPal, it appears here within 15 minutes, or right away if you press Refresh."}
         </Empty>
       ) : (
         <DisputeTable items={items} onChanged={refresh} />

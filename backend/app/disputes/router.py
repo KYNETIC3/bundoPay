@@ -40,6 +40,7 @@ def _summary(row: dict[str, Any]) -> dict[str, Any]:
         "amount": str(row["amount"]) if row["amount"] is not None else None,
         "currency": row["currency"],
         "due_date": row["due_date"],
+        "opened_at": (row["raw_json"] or {}).get("create_time"),
         "updated_at": row["updated_at"],
         "cleared": row.get("archived_at") is not None,
     }

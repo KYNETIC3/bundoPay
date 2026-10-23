@@ -1,12 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { DisputeTable } from "@/components/DisputeTable";
-import { Button, Card, CardTitle, Empty, Icon } from "@/components/ui";
-import { api } from "@/lib/api";
+import { DisputeTable, unresolvedCount } from "@/components/DisputeTable";
+import { Button, Card, CardTitle, Empty, Icon, Pill, SendButton } from "@/components/ui";
 import { money } from "@/lib/format";
 import { useLive } from "@/lib/hooks";
 import type { DisputeSummary } from "@/lib/types";
@@ -20,31 +18,31 @@ type Overview = {
   refunded: string;
   refund_count: number;
   auto_count: number;
-  activity: { label: string; event: string; at: string; dispute_id: string | null; reason: string | null; amount: string | null; currency: string | null }[];
 };
-type AgentSettings = { auto_refund_enabled: boolean; auto_refund_limit: string };
 
 export default function OverviewPage() {
-  const { data: o, reload: reloadOverview } = useLive<Overview>("/overview");
+  const { data: o } = useLive<Overview>("/overview");
   const { data: disputes, error: disputesError } = useLive<DisputeSummary[]>("/disputes");
-  const { data: rules } = useLive<AgentSettings>("/agent/settings", 120_000);
   const open = (disputes ?? []).filter((d) => d.status !== "RESOLVED");
   const waiting = open.filter((d) => d.draft_status === "awaiting_approval").length;
+  const needsAction = open.filter((d) => (d.status === "WAITING_FOR_SELLER_RESPONSE" && d.draft_status !== "submitted") || d.draft_status === "awaiting_approval").length;
   const cur = o?.currency ?? "USD";
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi tone="bg-cream text-ink border border-cream-line" icon="pending_actions" label="Need your response" value={o?.needs_response ?? "–"} note={o ? `${money(o.at_stake, cur)} at stake` : ""} />
-        <Kpi tone="bg-plum text-white" icon="approval" label="Waiting for your OK" value={waiting} note="Drafts ready to approve" />
-        <Kpi tone="bg-coral text-white" icon="currency_exchange" label="Refunded" value={o ? money(o.refunded, cur) : "–"} note={o ? `${o.refund_count} refunds · ${o.auto_count} automatic` : ""} />
-        <Kpi tone="bg-steel text-white" icon="schedule" label="Due within 48h" value={o?.due_soon ?? "–"} note={o ? `${o.resolved} closed so far` : ""} />
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+        <Kpi swatch="bg-ink" label="Needs you" value={disputes ? needsAction : "–"} note={o ? `${waiting} ready to approve, ${money(o.at_stake, cur)} at stake` : ""} />
+        <Kpi swatch="bg-aqua" label="Refunded" value={o ? money(o.refunded, cur) : "–"} note={o ? `${o.refund_count} refunds, ${o.auto_count} of them automatic` : ""} />
+        <Kpi swatch="bg-muted" label="Due within 48h" value={o?.due_soon ?? "–"} note={o ? `${o.resolved} closed so far` : ""} />
       </div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-        <Card className="lg:col-span-8">
-          <CardTitle action={<Button variant="ghost" href="/disputes" className="text-xs">All disputes <Icon name="chevron_right" className="text-[16px]" /></Button>}>
-            Open disputes
+      <div className="flex flex-col gap-6 lg:flex-row">
+        <Card className="min-w-0 flex-1">
+          <CardTitle action={<Button variant="ghost" href="/disputes" className="min-h-8 text-[13px]">All disputes <Icon name="chevron_right" className="text-[16px]" /></Button>}>
+            <span className="flex items-center gap-2">
+              Open disputes
+              {disputes && <Pill tone={open.length ? "coral" : "soft"}>{unresolvedCount(disputes)} unresolved</Pill>}
+            </span>
           </CardTitle>
           {disputes === null ? (
             disputesError ? <p className="text-sm text-danger">{disputesError}</p> : null
@@ -55,107 +53,76 @@ export default function OverviewPage() {
           )}
         </Card>
 
-        <div className="space-y-5 lg:col-span-4">
-          <AskCard />
-          <Card>
-            <CardTitle action={<Button variant="ghost" href="/settings#agent" className="text-xs">Change</Button>}>Refund limit</CardTitle>
-            {rules && (
-              <div className="flex items-center gap-3">
-                <span className={`grid h-10 w-10 place-items-center rounded-xl ${rules.auto_refund_enabled ? "bg-primary-fixed text-primary" : "bg-soft text-muted"}`}>
-                  <Icon name={rules.auto_refund_enabled ? "bolt" : "front_hand"} />
-                </span>
-                <div className="text-sm">
-                  {rules.auto_refund_enabled ? (
-                    <>Agent refunds up to <b className="font-mono">{money(rules.auto_refund_limit, cur)}</b> on its own.</>
-                  ) : (
-                    <>Agent asks you before every refund.</>
-                  )}
-                </div>
-              </div>
-            )}
-          </Card>
-          <Card>
-            <CardTitle
-              action={
-                o?.activity.length ? (
-                  <button
-                    onClick={() => api("/overview/activity/clear", { method: "POST" }).then(reloadOverview).catch(() => {})}
-                    className="text-xs text-muted hover:text-ink"
-                  >
-                    Clear
-                  </button>
-                ) : undefined
-              }
-            >
-              Agent activity
-            </CardTitle>
-            {!o?.activity.length ? (
-              <p className="text-sm text-muted">Nothing new.</p>
-            ) : (
-              <ul className="divide-y divide-line">
-                {o.activity.slice(0, 6).map((a, i) => (
-                  <li key={i} className="flex items-center justify-between gap-3 py-2 text-sm">
-                    <div className="min-w-0">
-                      {a.dispute_id ? (
-                        <Link href={`/disputes/${a.dispute_id}`} className="block truncate font-medium hover:underline">{a.label}</Link>
-                      ) : (
-                        <span className="block truncate font-medium">{a.label}</span>
-                      )}
-                      <span className="font-mono text-[11px] text-muted">{new Date(a.at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}</span>
-                    </div>
-                    {a.amount && <span className="shrink-0 font-mono text-xs font-semibold">{money(a.amount, a.currency)}</span>}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        </div>
+        <ChatToggle />
       </div>
     </>
   );
 }
 
-function Kpi({ tone, icon, label, value, note }: { tone: string; icon: string; label: string; value: React.ReactNode; note: string }) {
+function Kpi({ swatch, label, value, note }: { swatch: string; label: string; value: React.ReactNode; note: string }) {
   return (
-    <div className={`flex min-h-[116px] flex-col justify-between rounded-2xl p-5 shadow-sm ${tone}`}>
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold opacity-95">{label}</span>
-        <Icon name={icon} className="opacity-80" />
+    <div className="flex flex-col gap-5 rounded-[20px] bg-card px-7 py-6 shadow-card">
+      <div className="flex items-center gap-2.5 text-sm font-medium text-ink-2">
+        <span className={`h-2.5 w-2.5 shrink-0 rounded-[3px] ${swatch}`} />
+        {label}
       </div>
-      <div className="mt-3">
-        <div className="font-mono text-3xl font-bold tracking-tight tabular-nums">{value}</div>
-        <div className="mt-1 text-xs opacity-80">{note}</div>
+      <div>
+        <div className="text-[40px] font-semibold leading-none tracking-[-0.03em] tabular-nums">{value}</div>
+        <div className="mt-2 text-[13px] text-muted">{note}</div>
       </div>
     </div>
   );
 }
 
-function AskCard() {
+/** A Bundo icon beside Open disputes that rolls out into a chat bar; sending opens the Ask Bundo page. */
+function ChatToggle() {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const input = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) input.current?.focus({ preventScroll: true });
+  }, [open]);
+
+  // The outer box stretches to the row's height so the bar can animate to 100% of it.
   return (
-    <Card className="bg-ink text-white border-ink">
-      <div className="flex items-center gap-2">
-        <Icon name="forum" />
-        <span className="font-semibold">Talk to your agent</span>
-      </div>
-      <form
-        className="mt-3 flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          router.push(`/agent${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`);
-        }}
+    <div className="shrink-0">
+      <div
+        className={`flex flex-col overflow-hidden bg-card shadow-card ring-1 ring-ink/40 transition-all duration-300 ease-out motion-reduce:transition-none ${
+          open ? "h-[124px] w-full rounded-[20px] lg:h-full lg:w-[340px]" : "h-12 w-12 rounded-[24px]"
+        }`}
       >
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="e.g. Refund anything under $20"
-          className="min-w-0 flex-1 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-primary-fixed"
-        />
-        <button className="rounded-lg bg-white px-3 text-sm font-semibold text-ink hover:bg-primary-fixed" aria-label="Ask">
-          <Icon name="arrow_upward" className="text-[18px]" />
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          aria-label={open ? "Close chat" : "Ask Bundo"}
+          className="flex h-12 shrink-0 items-center gap-2.5 px-3 text-ink"
+        >
+          {/* shrink-0: the icon clips its overflow, so without it the hidden label squeezes it to nothing. */}
+          <Icon name="forum" className="shrink-0 text-[24px]" />
+          <span className={`shrink-0 whitespace-nowrap text-[15px] font-semibold transition-opacity duration-200 motion-reduce:transition-none ${open ? "opacity-100 delay-150" : "opacity-0"}`}>Bundo</span>
         </button>
-      </form>
-    </Card>
+        <form
+          inert={!open}
+          className={`mt-auto flex min-w-[280px] items-center gap-2 p-3 transition-opacity duration-200 motion-reduce:transition-none ${open ? "opacity-100 delay-150" : "opacity-0"}`}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (q.trim()) router.push(`/agent?q=${encodeURIComponent(q.trim())}`);
+          }}
+        >
+          <input
+            ref={input}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Message Bundo"
+            aria-label="Message Bundo"
+            className="min-h-11 min-w-0 flex-1 rounded-full bg-card px-4 text-sm text-ink ring-1 ring-inset ring-ink/40 placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+          <SendButton disabled={!q.trim()} />
+        </form>
+      </div>
+    </div>
   );
 }
