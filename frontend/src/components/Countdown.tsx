@@ -15,7 +15,7 @@ export function Countdown({ due }: { due: string | null }) {
   if (!r) return <span className="text-muted">—</span>;
   const cls = r.hours <= 0 ? "text-danger font-semibold" : r.hours < 48 ? "text-coral font-semibold" : "text-ink-2";
   return (
-    <span className={`font-mono text-xs tabular-nums ${cls}`} title={due ? new Date(due).toLocaleString() : undefined}>
+    <span className={`text-[13px] tabular-nums ${cls}`} title={due ? new Date(due).toLocaleString() : undefined}>
       {r.text}
     </span>
   );

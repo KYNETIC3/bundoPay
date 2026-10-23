@@ -19,17 +19,18 @@ const theme = themeQuartz.withParams({
   foregroundColor: "var(--color-ink)",
   backgroundColor: "var(--color-card)",
   accentColor: "var(--color-primary)",
-  borderColor: "var(--color-line)",
-  headerBackgroundColor: "var(--color-soft)",
-  headerTextColor: "var(--color-ink-2)",
-  headerFontSize: 11,
-  headerFontWeight: 700,
-  rowHoverColor: "var(--color-cream)",
+  borderColor: "rgb(54 33 62 / 0.06)",
+  headerBackgroundColor: "var(--color-card)",
+  headerTextColor: "var(--color-muted)",
+  headerFontSize: 13,
+  headerFontWeight: 500,
+  headerColumnBorder: false,
+  rowHoverColor: "#f8fbfc",
   wrapperBorder: false,
   wrapperBorderRadius: 0,
-  rowHeight: 58,
-  headerHeight: 38,
-  cellHorizontalPadding: 14,
+  rowHeight: 68,
+  headerHeight: 40,
+  cellHorizontalPadding: 16,
 });
 
 type Cell = ICellRendererParams<DisputeSummary>;
@@ -53,8 +54,8 @@ const columns: ColDef<DisputeSummary>[] = [
     cellRenderer: ({ data: d }: Cell) =>
       d && (
         <div className="flex h-full flex-col justify-center leading-tight">
-          <Link href={`/disputes/${d.id}`} className="font-medium hover:underline">{d.reason_label ?? "Dispute"}</Link>
-          <span className="font-mono text-[11px] text-muted">{d.paypal_dispute_id}</span>
+          <Link href={`/disputes/${d.id}`} className="font-semibold text-ink hover:text-primary">{d.reason_label ?? "Dispute"}</Link>
+          <span className="mt-1 text-xs text-muted">{d.paypal_dispute_id}</span>
         </div>
       ),
   },
@@ -64,7 +65,7 @@ const columns: ColDef<DisputeSummary>[] = [
     valueGetter: (p) => (p.data?.amount != null ? Number(p.data.amount) : null),
     type: "rightAligned",
     width: 120,
-    cellRenderer: ({ data: d }: Cell) => d && <span className="font-mono font-semibold tabular-nums">{money(d.amount, d.currency)}</span>,
+    cellRenderer: ({ data: d }: Cell) => d && <span className="font-semibold tabular-nums">{money(d.amount, d.currency)}</span>,
   },
   {
     headerName: "Status",
@@ -94,7 +95,7 @@ const columns: ColDef<DisputeSummary>[] = [
       d && (value == null ? (
         <span className="text-muted">—</span>
       ) : (
-        <span className="font-mono text-xs tabular-nums text-ink-2" title={`Opened ${new Date(d.opened_at!).toLocaleString()}`}>
+        <span className="text-[13px] tabular-nums text-muted" title={`Opened ${new Date(d.opened_at!).toLocaleString()}`}>
           {value}d
         </span>
       )),
@@ -120,9 +121,9 @@ const columns: ColDef<DisputeSummary>[] = [
       if (!d) return null;
       const ready = d.draft_status === "awaiting_approval" && isOpen(d);
       return ready ? (
-        <Button variant="primary" href={`/disputes/${d.id}/approve`} className="px-2.5 py-1 text-xs">Review</Button>
+        <Button variant="primary" href={`/disputes/${d.id}/approve`} className="min-h-8 px-3.5 text-[13px]">Review</Button>
       ) : (
-        <Button href={`/disputes/${d.id}`} className="px-2.5 py-1 text-xs">Open</Button>
+        <Button href={`/disputes/${d.id}`} className="min-h-8 px-3.5 text-[13px]">Open</Button>
       );
     },
   },
@@ -137,12 +138,12 @@ function unresolvedFirst({ nodes }: PostSortRowsParams<DisputeSummary>) {
 
 export function DisputeTable({ items }: { items: DisputeSummary[] }) {
   return (
-    <div className="-mx-5 border-y border-line">
+    <div className="-mx-7">
       <AgGridReact<DisputeSummary>
         theme={theme}
         rowData={items}
         columnDefs={columns}
-        defaultColDef={{ sortable: true, resizable: false, suppressMovable: true, cellClass: "flex items-center", headerClass: "uppercase tracking-wider" }}
+        defaultColDef={{ sortable: true, resizable: false, suppressMovable: true, cellClass: "flex items-center" }}
         getRowId={(p) => p.data.id}
         postSortRows={unresolvedFirst}
         rowClassRules={{ "opacity-60": (p) => !!p.data && !isOpen(p.data) }}

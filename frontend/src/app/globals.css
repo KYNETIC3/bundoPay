@@ -1,35 +1,43 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: var(--font-jakarta), system-ui, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, var(--font-inter), system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
 
-  --color-primary: #00628f;
-  --color-primary-container: #207bae;
-  --color-primary-fixed: #cae6ff;
-  --color-on-primary-container: #fcfcff;
+  /* Palette: plum-black #36213E, violet #554971, slate #63768D, aqua #8AC6D0, ice #B8F3FF */
+  --color-primary: #554971;
+  --color-primary-container: #36213e;
+  --color-primary-fixed: #ddf9ff;
+  --color-on-primary-container: #ffffff;
+  --color-aqua: #8ac6d0;
+  --color-ice: #b8f3ff;
 
-  --color-page: #f0f1f3;
+  --color-page: #f3f7f9;
   --color-card: #ffffff;
-  --color-soft: #f3f4f6;
-  --color-line: #e1e2e4;
-  --color-line-strong: #bfc7d0;
-  --color-ink: #191c1e;
-  --color-ink-2: #40484f;
-  --color-muted: #707880;
+  --color-soft: #f0f4f6;
+  --color-line: #ebeef1;
+  --color-line-strong: #d5dce3;
+  --color-ink: #36213e;
+  --color-ink-2: #554971;
+  --color-muted: #63768d;
 
-  --color-cream: #fdfbf0;
-  --color-cream-line: #e6dfc5;
-  --color-plum: #6b1d7a;
-  --color-coral: #de6449;
-  --color-steel: #3a6e8c;
-  --color-cerulean: #3b8ec2;
-  --color-danger: #ba1a1a;
-  --color-danger-soft: #ffdad6;
+  /* Older tone names, kept so every page picks up the new palette. */
+  --color-cream: #f7fafb;
+  --color-cream-line: #e6edf2;
+  --color-plum: #554971;
+  --color-coral: #a5473f;
+  --color-steel: #63768d;
+  --color-cerulean: #8ac6d0;
+  --color-danger: #a5473f;
+  --color-danger-soft: #fbedeb;
+
+  --shadow-card: 0 1px 2px rgb(54 33 62 / 0.04), 0 8px 24px -12px rgb(54 33 62 / 0.08);
+  --shadow-lift: 0 12px 32px -16px rgb(54 33 62 / 0.5);
 }
 
 html, body { margin: 0; padding: 0; }
 body { background: var(--color-page); color: var(--color-ink); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+:focus-visible { outline: 2px solid var(--color-aqua); outline-offset: 2px; }
 
 .material-symbols-outlined {
   font-family: "Material Symbols Outlined";
@@ -42,6 +50,6 @@ body { background: var(--color-page); color: var(--color-ink); font-family: var(
   white-space: nowrap;
   width: 1em; /* clip the ligature name so it never flashes as text while the font loads */
   overflow: hidden;
-  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  font-variation-settings: "FILL" 0, "wght" 300, "GRAD" 0, "opsz" 24;
   -webkit-font-smoothing: antialiased;
 }
