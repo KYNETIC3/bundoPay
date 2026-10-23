@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { api } from "@/lib/api";
+import { startEventStream, stopEventStream } from "@/lib/events";
 import { MerchantProvider, useMerchant } from "@/lib/merchant";
 import { supabase } from "@/lib/supabase";
 
@@ -38,6 +39,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
     const { data } = supabase().auth.onAuthStateChange((_e, s) => setSession(s));
     return () => data.subscription.unsubscribe();
   }, []);
+
+  const signedIn = !!session;
+  useEffect(() => {
+    if (!signedIn) return;
+    startEventStream();
+    return stopEventStream;
+  }, [signedIn]);
 
   const bare = BARE_PATHS.includes(pathname);
   useEffect(() => {

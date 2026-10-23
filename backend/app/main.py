@@ -10,6 +10,8 @@ from app.db import close_pool, open_pool
 from app.deps import close_gateway
 from app.agent.router import router as agent_router
 from app.disputes.router import router as disputes_router
+from app.events import start_listener, stop_listener
+from app.events_router import router as events_router
 from app.onboarding.router import router as onboarding_router
 from app.paypal_gateway import PayPalError, PermissionRevokedError, TransientPayPalError
 from app.webhooks.router import router as webhooks_router
@@ -20,7 +22,9 @@ logging.basicConfig(level=logging.INFO)
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await open_pool()
+    start_listener()
     yield
+    await stop_listener()
     await close_gateway()
     await close_pool()
 
@@ -72,3 +76,4 @@ app.include_router(onboarding_router)
 app.include_router(disputes_router)
 app.include_router(webhooks_router)
 app.include_router(agent_router)
+app.include_router(events_router)

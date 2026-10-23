@@ -20,6 +20,7 @@ from app.db import connection, jsonb
 from app.deps import get_gateway, revocation_guard
 from app.disputes.model import DisputeFacts, parse_dispute
 from app.disputes.sync import upsert_dispute
+from app.events import notify_dispute_changed
 
 from .assemble import assemble, payload_hash
 from .evidence import EvidenceMap, build_evidence_map, gather
@@ -233,6 +234,7 @@ async def run_agent(dispute_id: UUID, *, acknowledge_past_due: bool = False, llm
                     ),
                 )
                 draft_id = (await cur.fetchone())["id"]
+                await notify_dispute_changed(conn, merchant_id, dispute_id)
             await audit(
                 conn,
                 "agent.draft_ready" if spec else "agent.no_draft",
