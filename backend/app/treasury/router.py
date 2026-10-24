@@ -116,6 +116,25 @@ async def overview(merchant: CurrentMerchant = Depends(current_merchant)) -> dic
     }
 
 
+# The live console log: what the engine, planner and executor wrote to History.
+FEED_PREFIXES = ("trigger.", "plan.", "safety.", "approval.", "execution.", "capture.", "policy.", "account.", "limits.")
+
+
+@router.get("/feed")
+async def feed(after: int = 0, merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, Any]:
+    async with connection() as conn:
+        cur = await conn.execute(
+            "select id, flow_id, event, label, actor, data_json, created_at, prev_hash, row_hash from audit_log "
+            "where merchant_id = %s and id > %s and split_part(event, '.', 1) || '.' = any(%s) order by id desc limit 100",
+            (merchant.id, after, list(FEED_PREFIXES)),
+        )
+        rows = await cur.fetchall()
+    return {"entries": [
+        {**r, "chain": f"{(r['prev_hash'] or '')[:4]}…→{(r['row_hash'] or '')[:4]}…" if r["row_hash"] else None}
+        for r in reversed(rows)
+    ]}
+
+
 # -------------------------------------------------------------------------------------- accounts
 
 

@@ -160,8 +160,15 @@ async def agent_messages(merchant: CurrentMerchant = Depends(current_merchant)) 
             if ids:
                 c2 = await conn.execute(CARD_SQL, {"draft_id": m["draft_id"], "ids": ids, "merchant": merchant.id})
                 cards = [_card(r) for r in await c2.fetchall()]
+            plan = None
+            if m["kind"] == "treasury_approval" and (meta := m["meta"] or {}).get("plan_id"):
+                c3 = await conn.execute(
+                    "select status, expires_at from treasury_plans where id = %s and merchant_id = %s", (meta["plan_id"], merchant.id)
+                )
+                live = await c3.fetchone()
+                plan = {**meta, "status": live["status"] if live else "missing", "expires_at": live["expires_at"] if live else None}
             out.append({"id": m["id"], "role": m["role"], "kind": m["kind"], "content": m["content"],
-                        "created_at": m["created_at"], "unread": m["read_at"] is None, "cards": cards})
+                        "created_at": m["created_at"], "unread": m["read_at"] is None, "cards": cards, "plan": plan})
     return {"messages": out, "unread": sum(1 for m in out if m["unread"])}
 
 
