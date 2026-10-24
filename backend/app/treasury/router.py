@@ -14,10 +14,12 @@ from app.audit import audit
 from app.auth import CurrentMerchant, current_merchant
 from app.db import connection
 from app.executor.service import positions
-from app.safety.engine import Trigger
-from app.safety.service import load_limits
+from app.agent.orchestrator import default_llm
+from app.safety.engine import Movement, Trigger
+from app.safety.service import guard_plan, load_limits
 
 from . import service
+from .copilot import interpret
 from .policy import PolicyDoc
 from .runner import approve_plan, reject_plan, run_policy
 from .service import TreasuryError
@@ -71,6 +73,14 @@ class PlanHashBody(BaseModel):
     plan_hash: str
 
 
+class CopilotBody(BaseModel):
+    text: Annotated[str, Field(min_length=1, max_length=2000)]
+
+
+class AcceptBody(BaseModel):
+    drafts: Annotated[list[PolicyDoc], Field(min_length=1, max_length=4)]
+
+
 class SimulateBody(BaseModel):
     weekly_inflow: Money | None = None
 
@@ -117,7 +127,7 @@ async def overview(merchant: CurrentMerchant = Depends(current_merchant)) -> dic
 
 
 # The live console log: what the engine, planner and executor wrote to History.
-FEED_PREFIXES = ("trigger.", "plan.", "safety.", "approval.", "execution.", "capture.", "policy.", "account.", "limits.")
+FEED_PREFIXES = ("trigger.", "plan.", "safety.", "approval.", "execution.", "capture.", "policy.", "account.", "limits.", "copilot.")
 
 
 @router.get("/feed")
@@ -262,3 +272,59 @@ async def approve_plan_route(plan_id: UUID, body: PlanHashBody, merchant: Curren
 async def reject_plan_route(plan_id: UUID, merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, str]:
     await reject_plan(merchant.id, plan_id, approver=merchant.email)
     return {"status": "rejected"}
+
+
+# --------------------------------------------------------------------------------------- copilot
+
+
+@router.post("/copilot")
+async def copilot(body: CopilotBody, merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, Any]:
+    """Drafts only. A request to move money now goes to the safety engine as untrusted chat with no
+    authority, so it's blocked and recorded; there's no path from here to the executor."""
+    result = await interpret(body.text, default_llm())
+    out: dict[str, Any] = result.to_json()
+    async with connection() as conn:
+        async with conn.transaction():
+            flow_id = str(uuid4())
+            await audit(conn, "copilot.interpreted", merchant_id=merchant.id, flow_id=flow_id, label="ai_assessment",
+                        actor=f"copilot:{result.source}", data={"intent": result.intent, "drafts": len(result.drafts),
+                                                                "summary": result.summary})
+            if result.intent == "move_now":
+                limits = await load_limits(conn, merchant.id)
+                book = await service.load_book(conn, merchant.id)
+                accounts = await service.accounts_by_role(conn, merchant.id)
+                amount = Decimal(result.move["amount"]) if result.move else Decimal("0")
+                if amount <= 0 and book.operating is not None:
+                    amount = book.operating  # "sweep it all"
+                refund = "refund" in body.text.lower()
+                movement = Movement(
+                    kind="refund" if refund else "sweep", amount=amount, currency=limits["currency"],
+                    idempotency_key=f"chat:{flow_id}",
+                    to_account=None if refund else accounts.get(result.move["role"] if result.move else "ad_spend"),
+                )
+                guarded = await guard_plan(conn, merchant.id, [movement], trigger=Trigger("chat", verified=False),
+                                           authority=False, available=book.operating, flow_id=flow_id)
+                v = guarded.verdict
+                out["verdict"] = {"decision": v.decision, "check": v.check, "reason": v.reason,
+                                  "source": "Chat text is not an approval", "money_moved": "0.00", "amount": f"{amount:.2f}"}
+    return out
+
+
+@router.post("/copilot/accept")
+async def copilot_accept(body: AcceptBody, merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, Any]:
+    """The owner keeps the copilot's drafts: each becomes a new draft version marked as copilot-written.
+    Nothing is simulated or approved here; that stays with the owner in the editor."""
+    created = []
+    async with connection() as conn:
+        async with conn.transaction():
+            for doc in body.drafts:
+                cur = await conn.execute(
+                    "select id from treasury_policies where merchant_id = %s and kind = %s and status <> 'retired'",
+                    (merchant.id, doc.spec.kind),
+                )
+                existing = await cur.fetchone()
+                if existing:
+                    created.append(await service.new_version(conn, merchant.id, existing["id"], doc, created_by="copilot"))
+                else:
+                    created.append(await service.create_policy(conn, merchant.id, doc, created_by="copilot"))
+    return {"created": created}

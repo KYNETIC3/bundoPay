@@ -96,6 +96,17 @@ export type SimRow = {
 };
 export type Simulation = { rows: SimRow[]; failure_cases: { case: string; result: string; check: string; reason: string }[]; summary: string; disclaimer: string };
 
+export type CopilotResult = {
+  intent: "policies" | "move_now" | "unclear";
+  drafts: PolicyDoc[];
+  limit_suggestions: Partial<Record<"liquidity_floor" | "solo_limit", string>>;
+  move: { role: Role; amount: string } | null;
+  questions: string[];
+  summary: string;
+  source: "model" | "rules";
+  verdict?: { decision: string; check: string; reason: string; source: string; money_moved: string; amount: string };
+};
+
 export const ROLE_LABELS: Record<Role, string> = {
   operating: "Operating",
   tax_reserve: "Tax Reserve",
@@ -170,6 +181,9 @@ export const treasury = {
   editAccount: (id: string, a: { name: string; paypal_email: string; opening_balance: string }) =>
     api(`/treasury/accounts/${id}`, { method: "PUT", body: JSON.stringify(a) }),
   verifyAccount: (id: string) => api(`/treasury/accounts/${id}/verify`, { method: "POST" }),
+  copilot: (text: string) => api<CopilotResult>("/treasury/copilot", json({ text })),
+  acceptDrafts: (drafts: PolicyDoc[]) =>
+    api<{ created: { policy_id: string; version: number }[] }>("/treasury/copilot/accept", json({ drafts })),
   putLimits: (l: Omit<Limits, "currency">) => api("/treasury/limits", { method: "PUT", body: JSON.stringify(l) }),
 };
 
