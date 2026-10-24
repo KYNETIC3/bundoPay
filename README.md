@@ -164,7 +164,7 @@ Supabase stores the app's data and handles logins.
 
 ### 4.2 Create the database tables
 
-The tables are defined in six SQL files in the `supabase/migrations/` folder. You run each one in Supabase's SQL Editor, **in this order**:
+The tables are defined in seven SQL files in the `supabase/migrations/` folder. You run each one in Supabase's SQL Editor, **in this order**:
 
 1. `20261021000000_init.sql`
 2. `20261021120000_agent_limits.sql`
@@ -172,6 +172,7 @@ The tables are defined in six SQL files in the `supabase/migrations/` folder. Yo
 4. `20261022090000_clear_history.sql`
 5. `20261024090000_treasury_safety.sql`
 6. `20261025090000_treasury_executor.sql`
+7. `20261026090000_treasury_policies.sql`
 
 For each file:
 
@@ -487,10 +488,12 @@ It prints an address like `https://something-random.trycloudflare.com`. Copy it,
    https://something-random.trycloudflare.com/webhooks/paypal
    ```
 
-3. **Events:** tick these three:
+3. **Events:** tick these:
    - *Customer dispute created*
    - *Customer dispute updated*
    - *Customer dispute resolved*
+   - *Payment capture completed* (feeds the tax reserve and dispute buffer)
+   - *Payouts batch* and *Payouts item* events (confirm treasury sweeps)
 4. Save, then copy the new **Webhook ID**.
 
 ### 11.4 Tell BundoPay the webhook ID

@@ -14,6 +14,8 @@ from app.events import start_listener, stop_listener
 from app.events_router import router as events_router
 from app.onboarding.router import router as onboarding_router
 from app.paypal_gateway import PayPalError, PermissionRevokedError, TransientPayPalError
+from app.treasury.router import router as treasury_router
+from app.treasury.service import TreasuryError
 from app.webhooks.router import router as webhooks_router
 
 logging.basicConfig(level=logging.INFO)
@@ -36,6 +38,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(TreasuryError)
+async def treasury_error(_request: Request, exc: TreasuryError) -> JSONResponse:
+    return JSONResponse(status_code=exc.status, content={"detail": {"code": exc.code, "message": str(exc)}})
 
 
 @app.exception_handler(PermissionRevokedError)
@@ -77,3 +84,4 @@ app.include_router(disputes_router)
 app.include_router(webhooks_router)
 app.include_router(agent_router)
 app.include_router(events_router)
+app.include_router(treasury_router)

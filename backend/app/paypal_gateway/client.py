@@ -325,6 +325,9 @@ class PayPalGateway:
     async def get_payout_batch(self, payout_batch_id: str) -> dict[str, Any]:
         return await self._request("GET", f"/v1/payments/payouts/{payout_batch_id}", params={"page_size": 1000})
 
+    async def get_capture(self, capture_id: str) -> dict[str, Any]:
+        return await self._request("GET", f"/v2/payments/captures/{capture_id}")
+
     async def list_balances(self, currency: str) -> dict[str, Any]:
         """The app account's own balances. The sandbox may return nothing useful; callers fall back."""
         return await self._request("GET", "/v1/reporting/balances", params={"currency_code": currency})
