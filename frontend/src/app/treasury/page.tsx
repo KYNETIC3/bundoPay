@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { Copilot } from "@/components/Copilot";
 import { LiveLog, PlanApproval, PositionCards } from "@/components/treasury";
 import { Button, Card, CardTitle, Empty, Icon, Pill, type Tone } from "@/components/ui";
 import { dateTime, money } from "@/lib/format";
@@ -60,6 +61,8 @@ export default function TreasuryPage() {
             </div>
           </Card>
         )}
+
+        <Copilot currency={currency} onChanged={reload} />
 
         <Card>
           <CardTitle action={<Button variant="ghost" href="/treasury/setup"><Icon name="tune" className="text-[18px]" /> Accounts &amp; limits</Button>}>
@@ -153,6 +156,7 @@ function PolicyRow({ p, currency, onChanged }: { p: Policy; currency: string; on
           <Pill tone={STATUS_TONE[p.status]}>{p.status}</Pill>
           {live && <Pill tone="soft">v{live.version} live</Pill>}
           {draftAhead && <Pill tone="plum">v{last.version} awaiting approval</Pill>}
+          {last?.created_by === "copilot" && !last.approved && <Pill tone="cream"><Icon name="auto_awesome" className="text-[14px]" /> Copilot draft</Pill>}
         </div>
         <p className="mt-1 text-[13px] text-muted">
           {k.title}
