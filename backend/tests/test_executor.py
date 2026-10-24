@@ -92,6 +92,10 @@ class Conn:
                 rows.append({"id": a["id"], "role": a["role"], "name": a["name"], "opening_balance": a["opening_balance"], "moved": moved})
         elif s.startswith("select currency from treasury_limits"):
             rows = [{"currency": "USD"}]
+        elif s.startswith("select coalesce(sum(amount), 0) as out"):
+            out = sum((m["amount"] for m in db.movements.values()
+                       if m["kind"] in params[1] and m["status"] in ("allowed", "executing", "unconfirmed")), D("0"))
+            rows = [{"out": out}]
 
         class Cur:
             async def fetchone(self):
@@ -117,6 +121,7 @@ def db(monkeypatch):
     monkeypatch.setattr(ex, "connection", connection)
     monkeypatch.setattr(ex, "notify_treasury_changed", no_notify)
     monkeypatch.setattr("app.audit.chain_key", lambda: "k" * 32)
+    ex._balance_cache.clear()
     return db
 
 
@@ -290,3 +295,23 @@ async def test_payout_webhook_only_queues_a_refetch(monkeypatch):
     assert audited == [("webhook.received", "provider_verified")]
     unknown = {**event, "resource": {"batch_header": {"payout_batch_id": "OTHER"}}}
     assert await router._payout_event(unknown) == {"status": "ignored"}
+
+
+async def test_unavailable_balance_is_not_asked_for_on_every_load(db, gateway, paypal):
+    route = paypal.get("/v1/reporting/balances").mock(return_value=httpx.Response(403, json={"name": "NOT_AUTHORIZED"}))
+    for _ in range(3):
+        await ex.positions(Conn(db), M, gateway=gateway)
+    assert route.call_count == 1
+
+
+async def test_payout_in_flight_comes_off_simulated_operating(db, gateway, paypal):
+    """An UNCLAIMED or pending payout has left Operating for planning purposes, before any ledger entry."""
+    db.add("mv-1", "ad", "8760.00", "k-1")
+    paypal.post("/v1/payments/payouts").mock(return_value=batch_response())
+    paypal.get("/v1/payments/payouts/7HJ2").mock(return_value=batch_detail([("mv-1", "UNCLAIMED")]))
+    paypal.get("/v1/reporting/balances").mock(return_value=httpx.Response(403, json={"name": "NOT_AUTHORIZED"}))
+    result = await ex.execute(M, ["mv-1"], gateway=gateway)
+    assert result.status == "executing" and db.ledger == []
+    positions = {p.role: p for p in await ex.positions(Conn(db), M, gateway=gateway)}
+    assert positions["operating"].balance == D("25000.00")
+    assert positions["ad_spend"].balance == D("0")  # credited only once PayPal says SUCCESS

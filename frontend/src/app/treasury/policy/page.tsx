@@ -278,7 +278,8 @@ function SimResult({ sim, currency }: { sim: Simulation; currency: string }) {
                       <Pill tone={tone}>{label}</Pill>
                       <span className="text-[13px]">{r.items.map((i) => `${money(i.amount, currency)} → ${ROLE_LABELS[i.to]}`).join(", ") || "—"}</span>
                     </div>
-                    {r.outcome !== "allow" && <p className="mt-1 text-xs text-muted">{CHECK_LABELS[r.check] ?? r.check}: {r.reason}</p>}
+                    {r.outcome !== "allow" && r.outcome !== "skip" && <p className="mt-1 text-xs text-muted">{CHECK_LABELS[r.check] ?? r.check}: {r.reason}</p>}
+                    {r.outcome === "skip" && <p className="mt-1 text-xs text-muted">{r.reason}</p>}
                     {r.fallback && r.fallback.length > 0 && (
                       <p className="mt-1 text-xs font-medium text-ink-2">
                         Re-planned: {r.fallback.map((i) => `${money(i.amount, currency)} → ${ROLE_LABELS[i.to]}`).join(" + ")}
@@ -306,10 +307,16 @@ function SimResult({ sim, currency }: { sim: Simulation; currency: string }) {
   );
 }
 
+function Keyed() {
+  // A fresh editor per policy: its form state must never carry over from the one viewed before.
+  const params = useSearchParams();
+  return <Editor key={params.get("id") ?? `new:${params.get("kind")}`} />;
+}
+
 export default function PolicyPage() {
   return (
     <Suspense>
-      <Editor />
+      <Keyed />
     </Suspense>
   );
 }

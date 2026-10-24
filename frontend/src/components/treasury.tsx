@@ -160,7 +160,7 @@ function summary(e: FeedEntry): string {
   return Object.entries(d).slice(0, 3).map(([k, v]) => `${k}=${typeof v === "object" ? JSON.stringify(v) : String(v)}`).join(" ");
 }
 
-/** The console's right-hand pane: History entries as they're written, one line each. */
+/** The console's right-hand pane: History entries as they're written, newest first, one line each. */
 export function LiveLog({ entries }: { entries: FeedEntry[] }) {
   const [raw, setRaw] = useState(false);
   return (
@@ -175,7 +175,7 @@ export function LiveLog({ entries }: { entries: FeedEntry[] }) {
       </div>
       <ol className="flex-1 space-y-1.5 overflow-y-auto px-4 py-3 font-mono" aria-live="polite">
         {entries.length === 0 && <li className="text-white/50">Waiting for the first event…</li>}
-        {entries.map((e) =>
+        {[...entries].reverse().map((e) =>
           raw ? (
             <li key={e.id} className="break-all text-white/80">
               {JSON.stringify({ t: e.created_at, type: e.event, label: e.label, flow: e.flow_id?.slice(0, 8), chain: e.chain, ...e.data_json })}

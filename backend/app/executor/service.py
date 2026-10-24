@@ -10,6 +10,7 @@ confirms the payout.
 from __future__ import annotations
 
 import hashlib
+import time
 import logging
 from dataclasses import dataclass
 from decimal import Decimal
@@ -287,6 +288,14 @@ async def positions(conn: AsyncConnection, merchant_id: UUID | str, *, gateway: 
         (merchant_id,),
     )
     rows = await cur.fetchall()
+    # Money already handed to PayPal but not yet confirmed has left Operating as far as any new plan is
+    # concerned; counting it as still there would let the next run breach the floor.
+    inflight = await conn.execute(
+        "select coalesce(sum(amount), 0) as out from movements where merchant_id = %s and kind = any(%s) "
+        "and status in ('allowed', 'executing', 'unconfirmed')",
+        (merchant_id, list(SENDABLE)),
+    )
+    pending_out = Decimal((await inflight.fetchone())["out"])
     limits = await conn.execute("select currency from treasury_limits where merchant_id = %s", (merchant_id,))
     lim = await limits.fetchone()
     live = await paypal_balance(gateway or get_gateway(), lim["currency"] if lim else "USD")
@@ -295,19 +304,31 @@ async def positions(conn: AsyncConnection, merchant_id: UUID | str, *, gateway: 
         if r["role"] == "operating" and live is not None:
             out.append(Position(str(r["id"]), r["role"], r["name"], live, "paypal"))
         elif r["role"] == "operating":
-            out.append(Position(str(r["id"]), r["role"], r["name"], Decimal(r["opening_balance"]) + Decimal(r["moved"]), "simulated"))
+            out.append(Position(str(r["id"]), r["role"], r["name"], Decimal(r["opening_balance"]) + Decimal(r["moved"]) - pending_out, "simulated"))
         else:
             out.append(Position(str(r["id"]), r["role"], r["name"], Decimal(r["opening_balance"]) + Decimal(r["moved"]), "ledger"))
     return out
 
 
+BALANCE_TTL = 60.0  # seconds to reuse a balance PayPal returned
+BALANCE_UNAVAILABLE_TTL = 600.0  # the sandbox often refuses this endpoint; don't ask on every page load
+_balance_cache: dict[str, tuple[float, Decimal | None]] = {}
+
+
 async def paypal_balance(gw: PayPalGateway, currency: str) -> Decimal | None:
+    cached = _balance_cache.get(currency)
+    if cached and cached[0] > time.monotonic():
+        return cached[1]
+    value: Decimal | None = None
     try:
         body = await gw.list_balances(currency)
     except PayPalError as exc:
         log.info("Balances unavailable (%s); using the simulated balance", exc.name)
+        _balance_cache[currency] = (time.monotonic() + BALANCE_UNAVAILABLE_TTL, None)
         return None
     for b in body.get("balances") or []:
         if b.get("currency") == currency and (avail := (b.get("available_balance") or {}).get("value")) is not None:
-            return Decimal(avail)
-    return None
+            value = Decimal(avail)
+            break
+    _balance_cache[currency] = (time.monotonic() + (BALANCE_TTL if value is not None else BALANCE_UNAVAILABLE_TTL), value)
+    return value
