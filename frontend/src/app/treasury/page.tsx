@@ -65,7 +65,12 @@ export default function TreasuryPage() {
         <Copilot currency={currency} onChanged={reload} />
 
         <Card>
-          <CardTitle action={<Button variant="ghost" href="/treasury/setup"><Icon name="tune" className="text-[18px]" /> Accounts &amp; limits</Button>}>
+          <CardTitle action={
+            <div className="flex flex-wrap gap-1">
+              <Button variant="ghost" href="/treasury/history"><Icon name="timeline" className="text-[18px]" /> History</Button>
+              <Button variant="ghost" href="/treasury/setup"><Icon name="tune" className="text-[18px]" /> Accounts &amp; limits</Button>
+            </div>
+          }>
             Policies
           </CardTitle>
           <div className="divide-y divide-ink/[0.06]">

@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, model_validator
 
-from app.audit import audit
+from app.audit import audit, verify_chain
 from app.auth import CurrentMerchant, current_merchant
 from app.db import connection
 from app.executor.service import positions
@@ -328,3 +328,66 @@ async def copilot_accept(body: AcceptBody, merchant: CurrentMerchant = Depends(c
                 else:
                     created.append(await service.create_policy(conn, merchant.id, doc, created_by="copilot"))
     return {"created": created}
+
+
+# --------------------------------------------------------------------------------------- history
+
+FLOW_OUTCOMES = {  # the last decisive event in a flow, in plain words
+    "execution.confirmed": "Confirmed by PayPal", "execution.accepted": "Sent to PayPal", "execution.failed": "PayPal rejected it",
+    "execution.unconfirmed": "Waiting on PayPal", "approval.declined": "Declined by you", "approval.granted": "Approved by you",
+    "safety.block": "Blocked by the safety engine", "safety.ask": "Waiting for your approval", "safety.allow": "Allowed",
+    "plan.skipped": "Nothing to move", "copilot.interpreted": "Copilot drafted",
+}
+
+
+def _outcome(events: list[str]) -> str:
+    for e in reversed(events):
+        if e in FLOW_OUTCOMES:
+            return FLOW_OUTCOMES[e]
+    return events[-1] if events else ""
+
+
+@router.get("/history")
+async def history(merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, Any]:
+    """One row per flow: what started it, what it ended as, and how many History entries it has."""
+    async with connection() as conn:
+        cur = await conn.execute(
+            """
+            select flow_id, min(created_at) as started, max(created_at) as ended, count(*) as entries,
+                   array_agg(event order by id) as events,
+                   (array_agg(data_json->>'policy' order by id) filter (where data_json ? 'policy'))[1] as policy,
+                   (array_agg(actor order by id) filter (where event like 'trigger.%%' or event like 'copilot.%%'))[1] as started_by,
+                   -- the amount of the flow's last safety decision (after any re-plan), never a text comparison
+                   (array_agg((data_json->>'total')::numeric order by id desc) filter (where event like 'safety.%%' and data_json ? 'total'))[1] as total
+            from audit_log where merchant_id = %s and flow_id is not null
+            group by flow_id order by min(created_at) desc limit 100
+            """,
+            (merchant.id,),
+        )
+        flows = await cur.fetchall()
+    return {"flows": [{**f, "outcome": _outcome(f["events"])} for f in flows]}
+
+
+@router.get("/history/{flow_id}")
+async def flow_timeline(flow_id: UUID, merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, Any]:
+    async with connection() as conn:
+        cur = await conn.execute(
+            "select id, event, label, actor, data_json, created_at, prev_hash, row_hash from audit_log "
+            "where merchant_id = %s and flow_id = %s order by id",
+            (merchant.id, flow_id),
+        )
+        entries = await cur.fetchall()
+    if not entries:
+        raise TreasuryError("not_found", "No History for that flow", 404)
+    return {"flow_id": str(flow_id), "outcome": _outcome([e["event"] for e in entries]), "entries": entries}
+
+
+@router.post("/history/verify")
+async def verify_history(merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, Any]:
+    """Recompute every HMAC link in this account's History. Detects edits, removals, insertions and reordering
+    after the fact; it can't prove an entry was true when it was written."""
+    async with connection() as conn:
+        report = await verify_chain(conn, merchant.id)
+        await audit(conn, "history.verified", merchant_id=merchant.id, actor="owner",
+                    data={"ok": report.ok, "entries": report.entries, "broken_at": report.broken_at})
+    return {"ok": report.ok, "entries": report.entries, "broken_at": report.broken_at, "reason": report.reason}
