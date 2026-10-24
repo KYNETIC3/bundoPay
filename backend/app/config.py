@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     # Approvals.
     approval_signing_key: str = Field(default="", description="HMAC key for approval tokens")
     approval_token_ttl_seconds: int = 600
+    # HMAC key for the audit-log chain; falls back to the approval key when empty.
+    audit_chain_key: str = ""
 
     # Agent.
     gemini_api_key: str = ""

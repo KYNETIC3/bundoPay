@@ -164,12 +164,13 @@ Supabase stores the app's data and handles logins.
 
 ### 4.2 Create the database tables
 
-The tables are defined in four SQL files in the `supabase/migrations/` folder. You run each one in Supabase's SQL Editor, **in this order**:
+The tables are defined in five SQL files in the `supabase/migrations/` folder. You run each one in Supabase's SQL Editor, **in this order**:
 
 1. `20261021000000_init.sql`
 2. `20261021120000_agent_limits.sql`
 3. `20261021220000_agent_messages.sql`
 4. `20261022090000_clear_history.sql`
+5. `20261024090000_treasury_safety.sql`
 
 For each file:
 

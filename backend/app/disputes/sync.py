@@ -222,14 +222,15 @@ async def _sync(merchant_id: UUID, *, thorough: bool) -> dict[str, int]:
     async with connection() as conn:
         for raw in raws:
             await upsert_dispute(conn, merchant_id, raw)
-        # Record the sync, log it and count the merchant's disputes in a single round trip.
+        # Record the sync and count the merchant's disputes in one round trip; the log entry joins the chain.
         cur = await conn.execute(
             """
-            with u as (update merchants set last_synced_at = %(t)s where id = %(m)s),
-                 a as (insert into audit_log (merchant_id, event, data_json) values (%(m)s, 'sync.completed', %(d)s))
+            with u as (update merchants set last_synced_at = %(t)s where id = %(m)s)
             select count(*) as n from disputes where merchant_id = %(m)s and archived_at is null
             """,
-            {"t": started, "m": merchant_id, "d": jsonb({"listed": len(summaries), "fetched": len(ids)})},
+            {"t": started, "m": merchant_id},
         )
         total = (await cur.fetchone())["n"]
+        await audit(conn, "sync.completed", merchant_id=merchant_id, label="provider_verified",
+                    data={"listed": len(summaries), "fetched": len(ids)})
     return {"updated": len(ids), "total": total}
