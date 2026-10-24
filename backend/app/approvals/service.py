@@ -28,6 +28,8 @@ from app.disputes.model import REASON_LABELS
 from app.disputes.sync import upsert_dispute
 from app.events import notify_dispute_changed
 from app.paypal_gateway import PayPalError
+from app.safety.engine import Movement, Trigger
+from app.safety.service import guard, set_movement_status
 
 from .submit import ApprovalRecord, DraftRecord, SubmissionResult, submit_dispute_response
 from .tokens import ApprovalError, issue, token_hash
@@ -107,7 +109,7 @@ class PgSubmissionStore:
 
 async def _owned_draft(conn, merchant_id: UUID, draft_id: UUID) -> dict[str, Any]:
     cur = await conn.execute(
-        "select dr.*, d.paypal_dispute_id, d.due_date, d.merchant_id, d.amount from drafts dr join disputes d on d.id = dr.dispute_id "
+        "select dr.*, d.paypal_dispute_id, d.due_date, d.merchant_id, d.amount, d.currency from drafts dr join disputes d on d.id = dr.dispute_id "
         "where dr.id = %s and d.merchant_id = %s",
         (draft_id, merchant_id),
     )
@@ -234,6 +236,71 @@ async def _approve_and_submit(
     acknowledge_past_due: bool,
     allowed_actions: tuple[str, ...] | None = None,
     max_amount: Decimal | None = None,
+) -> SubmissionResult:
+    movement_id = await _guard_money(merchant_id, draft_id, source=source, solo=max_amount)
+    try:
+        result = await _approve_and_submit_checked(
+            merchant_id, draft_id, source=source, payload_hash_seen=payload_hash_seen,
+            acknowledge_past_due=acknowledge_past_due, allowed_actions=allowed_actions, max_amount=max_amount,
+        )
+    except BaseException:
+        if movement_id:
+            async with connection() as conn:
+                await set_movement_status(conn, movement_id, "failed")
+        raise
+    if movement_id:
+        async with connection() as conn:
+            await set_movement_status(conn, movement_id, "succeeded", paypal_ref=f"dispute:{result.status_after}")
+    return result
+
+
+# Dispute actions that send the buyer money. Evidence moves none, so the engine has nothing to check.
+MONEY_ACTIONS = ("accept_claim", "make_offer")
+
+
+async def _guard_money(merchant_id: UUID, draft_id: UUID, *, source: str, solo: Decimal | None) -> UUID | None:
+    """Run the refund through the safety engine before any token is minted. Its verdict is recorded
+    whether or not it allows, so a blocked attempt still shows in History."""
+    async with connection() as conn:
+        async with conn.transaction():
+            draft = await _owned_draft(conn, merchant_id, draft_id)
+            if draft["action"] not in MONEY_ACTIONS:
+                return None
+            if draft["action"] == "make_offer":
+                value = (draft["payload_json"].get("offer_amount") or {}).get("value")
+            else:
+                value = draft["amount"]
+            current = payload_hash(draft["paypal_dispute_id"], draft["action"], draft["payload_json"], draft["files"])
+            guarded = await guard(
+                conn,
+                merchant_id,
+                Movement(
+                    kind="refund",
+                    amount=Decimal(str(value)) if value is not None else Decimal("0"),
+                    currency=draft["currency"] or "USD",
+                    idempotency_key=f"dispute:{draft_id}:{current}",
+                ),
+                # The merchant's click is an authenticated request; a policy refund starts from the synced
+                # dispute (webhook or poll). Neither can come from text.
+                trigger=Trigger("user" if source == "merchant" else "scheduler", verified=True),
+                authority=True,
+                approved=source == "merchant",
+                solo=solo,
+            )
+    if not guarded.verdict.allowed:
+        raise DraftError(f"safety_{guarded.verdict.decision}", guarded.verdict.reason, 409)
+    return guarded.movement_id
+
+
+async def _approve_and_submit_checked(
+    merchant_id: UUID,
+    draft_id: UUID,
+    *,
+    source: str,
+    payload_hash_seen: str | None,
+    acknowledge_past_due: bool,
+    allowed_actions: tuple[str, ...] | None,
+    max_amount: Decimal | None,
 ) -> SubmissionResult:
     settings = get_settings()
     async with connection() as conn:
