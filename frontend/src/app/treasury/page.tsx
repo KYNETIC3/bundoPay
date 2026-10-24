@@ -93,7 +93,7 @@ export default function TreasuryPage() {
                   {data.movements.map((m) => (
                     <tr key={m.id}>
                       <td className="whitespace-nowrap px-2 py-2.5 text-muted">{dateTime(m.created_at)}</td>
-                      <td className="px-2">{m.account_name ?? (m.role ? ROLE_LABELS[m.role] : m.kind)}</td>
+                      <td className="whitespace-nowrap px-2">{m.account_name ?? (m.role ? ROLE_LABELS[m.role] : m.kind)}</td>
                       <td className="px-2 font-semibold tabular-nums">{money(m.amount, m.currency)}</td>
                       <td className="px-2" title={m.reason}><Pill tone={VERDICT_TONE[m.verdict]}>{CHECK_LABELS[m.check_code ?? ""] ?? m.check_code}</Pill></td>
                       <td className="px-2 text-muted">{m.status.replace("_", " ")}</td>

@@ -24,7 +24,7 @@ const SOURCE: Record<Position["source"], { label: string; tone: Tone; title: str
 export function PositionCards({ positions, floor, currency }: { positions: Position[]; floor: string; currency: string }) {
   if (!positions.length) return null;
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4">
       {positions.map((p) => {
         const s = SOURCE[p.source];
         const atFloor = p.role === "operating" && Number(p.balance) <= Number(floor);
@@ -37,7 +37,7 @@ export function PositionCards({ positions, floor, currency }: { positions: Posit
               </span>
               <span title={s.title}><Pill tone={s.tone}>{s.label}</Pill></span>
             </div>
-            <p className="mt-4 text-[28px] font-semibold tabular-nums tracking-[-0.02em]">{money(p.balance, currency)}</p>
+            <p className="mt-4 break-words text-[26px] font-semibold tabular-nums tracking-[-0.02em]">{money(p.balance, currency)}</p>
             {p.role === "operating" ? (
               <p className={`mt-1 text-xs ${atFloor ? "font-semibold text-danger" : "text-muted"}`}>
                 Floor {money(floor, currency)}{atFloor ? ": at or below" : ""}
