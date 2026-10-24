@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 
+import { PlanApproval } from "@/components/treasury";
 import { Button, Icon, Pill, SendButton } from "@/components/ui";
 import { api, json } from "@/lib/api";
 import { money } from "@/lib/format";
 import { agentState } from "@/lib/status";
+import type { PlanItem } from "@/lib/treasury";
 
 type Card = {
   dispute_id: string;
@@ -23,12 +25,23 @@ type Card = {
   payload_hash: string | null;
   offer_amount: string | null;
 };
-type Message = { id: number | string; role: "agent" | "owner"; kind: string; content: string; created_at: string; unread?: boolean; cards: Card[] };
+type PlanMeta = { plan_id: string; plan_hash: string; total: string; items: PlanItem[]; status: string };
+type Message = {
+  id: number | string;
+  role: "agent" | "owner";
+  kind: string;
+  content: string;
+  created_at: string;
+  unread?: boolean;
+  cards: Card[];
+  plan?: PlanMeta | null;
+};
 
 // How each kind of Bundo update looks: what happened at a glance.
 const KIND: Record<string, { icon: string; tone: string; label: string }> = {
   auto_refund: { icon: "currency_exchange", tone: "bg-ink text-white", label: "Refunded" },
   decision: { icon: "approval", tone: "bg-primary text-white", label: "Needs your OK" },
+  treasury_approval: { icon: "account_balance", tone: "bg-primary text-white", label: "Treasury: needs your OK" },
   submitted: { icon: "send", tone: "bg-primary-fixed text-primary", label: "Sent" },
   outcome: { icon: "flag", tone: "bg-soft text-ink-2", label: "Closed" },
   failed: { icon: "error", tone: "bg-danger-soft text-danger", label: "Didn't go through" },
@@ -190,6 +203,7 @@ function AgentMessage({ m, onChanged }: { m: Message; onChanged: () => void }) {
         </div>
         <div className="whitespace-pre-wrap rounded-[20px] rounded-tl-md bg-page px-[18px] py-4 text-[15px] leading-relaxed">{m.content}</div>
         {m.cards.map((c) => <DisputeCard key={c.dispute_id} c={c} decision={m.kind === "decision"} onChanged={onChanged} />)}
+        {m.plan && <PlanApproval plan={m.plan} onDone={onChanged} />}
       </div>
     </div>
   );

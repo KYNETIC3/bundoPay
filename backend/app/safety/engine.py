@@ -8,7 +8,7 @@ a signature-verified webhook, an authenticated request or a verified approval to
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal, InvalidOperation
 from typing import Literal
 
@@ -153,3 +153,46 @@ def check(m: Movement, ctx: Context) -> Verdict:
     if m.amount > solo and not ctx.approved:
         return Verdict("ask", "7_needs_approval", f"{_money(m.amount)} exceeds the solo limit of {_money(solo)}")
     return Verdict("allow", "ok", "Within the approved policy and every limit" if not ctx.approved else "Approved by the owner, within every limit")
+
+
+@dataclass(frozen=True)
+class PlanVerdict:
+    decision: Decision
+    check: str
+    reason: str
+    items: tuple[Verdict, ...]
+    total: Decimal
+
+    @property
+    def allowed(self) -> bool:
+        return self.decision == "allow"
+
+
+def check_plan(movements: list[Movement], ctx: Context) -> PlanVerdict:
+    """A plan is one run: every item is checked against the balance and totals the earlier items leave,
+    then the run as a whole must fit the per-run cap and the solo limit. Splitting a sweep into small
+    items can't dodge either."""
+    if not movements:
+        return PlanVerdict("block", "0_empty_plan", "The plan has nothing to move", (), Decimal("0"))
+    verdicts: list[Verdict] = []
+    available, spent, keys = ctx.available, ctx.spent, set(ctx.used_keys)
+    total = Decimal("0")
+    for m in movements:
+        # Items are checked as if approved; the approval question is asked once, for the whole run.
+        v = check(m, replace(ctx, available=available, spent=spent, used_keys=frozenset(keys), approved=True))
+        verdicts.append(v)
+        if v.decision == "block":
+            return PlanVerdict("block", v.check, v.reason, tuple(verdicts), total + m.amount)
+        total += m.amount
+        keys.add(m.idempotency_key)
+        spent = Spent(day=spent.day + m.amount, week=spent.week + m.amount, month=spent.month + m.amount)
+        if available is not None:
+            available -= m.amount
+    if total > ctx.limits.per_run:
+        return PlanVerdict("block", "4_hard_cap", f"The run totals {_money(total)}, above the {_money(ctx.limits.per_run)} per-run hard cap", tuple(verdicts), total)
+    irreversible = any(m.irreversible for m in movements)
+    lim = ctx.limits
+    solo = lim.solo if irreversible or lim.solo_reversible is None else max(lim.solo, lim.solo_reversible)
+    if total > solo and not ctx.approved:
+        return PlanVerdict("ask", "7_needs_approval", f"{_money(total)} exceeds the solo limit of {_money(solo)}", tuple(verdicts), total)
+    return PlanVerdict("allow", "ok", "Within the approved policy and every limit" if not ctx.approved else "Approved by the owner, within every limit", tuple(verdicts), total)

@@ -34,6 +34,12 @@ async def notify_dispute_changed(conn: AsyncConnection, merchant_id: UUID | str,
     await conn.execute("select pg_notify(%s, %s)", (CHANNEL, payload))
 
 
+async def notify_treasury_changed(conn: AsyncConnection, merchant_id: UUID | str) -> None:
+    """Same channel and fan-out as dispute changes; `kind` lets the browser tell them apart."""
+    payload = json.dumps({"merchant_id": str(merchant_id), "kind": "treasury"})
+    await conn.execute("select pg_notify(%s, %s)", (CHANNEL, payload))
+
+
 def subscribe(merchant_id: UUID | str) -> asyncio.Queue[dict[str, Any]]:
     queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=QUEUE_SIZE)
     _subscribers.setdefault(str(merchant_id), set()).add(queue)

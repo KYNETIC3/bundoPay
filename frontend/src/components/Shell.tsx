@@ -16,12 +16,17 @@ const BARE_PATHS = ["/login", "/onboarding", "/onboarding/return"];
 
 const NAV = [
   { href: "/", label: "Overview", icon: "dashboard" },
+  { href: "/treasury", label: "Treasury", icon: "account_balance" },
   { href: "/disputes", label: "Disputes", icon: "gavel" },
   { href: "/agent", label: "Ask Bundo", icon: "forum" },
   { href: "/settings", label: "Settings", icon: "tune" },
 ];
 
 const TITLES: [string, string, string][] = [
+  ["/treasury/history", "History", "Every run, decision and payout, one timeline per flow, with a tamper check."],
+  ["/treasury/setup", "Accounts & limits", "Where treasury money may go, and how much may move without you."],
+  ["/treasury/policy", "Policy", "Every change is a new version: simulate it, read the summary, then approve it."],
+  ["/treasury", "Treasury", "Your reserves, the policies that fund them, and every decision the safety engine made."],
   ["/disputes/", "", ""],
   ["/disputes", "Disputes", "Everything PayPal has sent you, newest first."],
   ["/agent", "Ask Bundo", ""],
@@ -84,7 +89,9 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
   }, []);
   const [, title, subtitle] = TITLES.find(([p]) => (p === "/" ? pathname === "/" : pathname.startsWith(p))) ?? ["", "BundoPay", ""];
   // Dispute pages carry their own heading; the header only offers a way back.
-  const back = pathname.endsWith("/approve")
+  const back = pathname.startsWith("/treasury/")
+    ? { href: "/treasury", label: "Treasury" }
+    : pathname.endsWith("/approve")
     ? { href: pathname.slice(0, -"/approve".length), label: "Dispute" }
     : pathname.startsWith("/disputes/")
       ? { href: "/disputes", label: "Disputes" }

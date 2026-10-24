@@ -1,6 +1,9 @@
 # BundoPay
 
-BundoPay is a web app that handles a merchant's PayPal disputes. Its assistant, **Bundo**, reviews each new dispute. It refunds the buyer when the amount is within a limit the merchant sets, and asks the merchant first when it isn't.
+BundoPay is a web app for PayPal merchants. It has two parts:
+
+- **Disputes.** Its assistant, **Bundo**, reviews each new dispute. It refunds the buyer when the amount is within a limit the merchant sets, and asks the merchant first when it isn't.
+- **Treasury.** Policies keep money for tax, open disputes and ad spend in separate reserve accounts. Every movement is simulated first, then checked by a safety engine (plain code, not AI), and approved by you when it's above your limit. It's then sent with PayPal Payouts, and recorded in a hash-linked History.
 
 BundoPay runs against the **PayPal sandbox** only, so no real money moves.
 
@@ -9,7 +12,7 @@ The app has three parts. The setup below gets all three running on your computer
 | Part | What it does | Address |
 |---|---|---|
 | **API** (Python) | Talks to PayPal, the database and Gemini | http://localhost:8000 |
-| **Worker** (Python) | Checks PayPal for new disputes every 15 minutes, in the background | none |
+| **Worker** (Python) | In the background: checks PayPal for new disputes every 15 minutes, runs treasury policies when they're due, and confirms payouts every 2 minutes | none |
 | **Website** (Next.js) | The dashboard you use | http://localhost:3000 |
 
 ## Contents
@@ -23,7 +26,7 @@ The app has three parts. The setup below gets all three running on your computer
 7. [Create the config files](#7-create-the-config-files)
 8. [Install the dependencies](#8-install-the-dependencies)
 9. [Start the app](#9-start-the-app)
-10. [Try it out](#10-try-it-out)
+10. [Try it out](#10-try-it-out) (disputes and treasury)
 11. [Optional: receive PayPal webhooks](#11-optional-receive-paypal-webhooks)
 12. [Run the tests](#12-run-the-tests)
 13. [Troubleshooting](#13-troubleshooting)
@@ -164,13 +167,15 @@ Supabase stores the app's data and handles logins.
 
 ### 4.2 Create the database tables
 
-The tables are defined in five SQL files in the `supabase/migrations/` folder. You run each one in Supabase's SQL Editor, **in this order**:
+The tables are defined in seven SQL files in the `supabase/migrations/` folder. You run each one in Supabase's SQL Editor, **in this order**:
 
 1. `20261021000000_init.sql`
 2. `20261021120000_agent_limits.sql`
 3. `20261021220000_agent_messages.sql`
 4. `20261022090000_clear_history.sql`
 5. `20261024090000_treasury_safety.sql`
+6. `20261025090000_treasury_executor.sql`
+7. `20261026090000_treasury_policies.sql`
 
 For each file:
 
@@ -214,6 +219,7 @@ The sandbox is PayPal's test environment. It comes with fake accounts and fake m
    - **Disputes**
    - **Transaction Search**
    - **Tracking**
+   - **Payouts** (treasury sweeps between your reserve accounts)
 4. Save, then copy the app's **Client ID** and **Secret** into your text file.
 
 ### 5.2 Find the merchant ID
@@ -225,6 +231,15 @@ The sandbox is PayPal's test environment. It comes with fake accounts and fake m
 ### 5.3 Note the buyer account
 
 On the same **Sandbox Accounts** page, find the **Personal** account. Save its **email** and **password**. You'll log in as this buyer in step 10 to open a test dispute.
+
+### 5.4 Optional: create reserve accounts for Treasury
+
+Treasury sweeps money from your app's business account into separate **reserve** accounts with PayPal Payouts. Each reserve is its own sandbox business account.
+
+1. On **Testing Tools → Sandbox Accounts**, click **Create account**, choose **Business**, and create three: one each for tax, disputes and ad spend.
+2. Save each account's **email**. You'll enter them in step 10.4.
+
+> If you skip this and use made-up emails, payouts still go out, but PayPal reports them as **UNCLAIMED**. BundoPay then correctly leaves them as "executing" and never records the money as arrived.
 
 > BundoPay can't connect *other* merchants' PayPal accounts until PayPal approves it as a partner. Until then, it uses **test mode**: it works with your own sandbox business account. You turn test mode on in step 7.
 
@@ -301,6 +316,7 @@ Open `backend/.env` in a text editor and fill in these lines. Paste each value r
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase **`service_role` key** |
 | `APPROVAL_SIGNING_KEY` | The string from step 7.2 |
 | `GEMINI_API_KEY` | Your **Gemini key** (step 6), or leave empty |
+| `AUDIT_CHAIN_KEY` | Optional. Another string made like the one in step 7.2. It signs the History chain. Leave it empty to reuse `APPROVAL_SIGNING_KEY`, and don't change it later, or old entries will no longer verify. |
 
 Leave every other line as it is. `PAYPAL_WEBHOOK_ID` stays empty unless you do step 11.
 
@@ -444,6 +460,29 @@ You'll act as a buyer who pays the business, then complains.
 
 Set the refund limit in **Settings**.
 
+### 10.4 Set up Treasury
+
+1. Open **Treasury** in the side bar, then **Accounts & limits**.
+2. Add four accounts:
+   - **Operating:** its opening balance is the cash you start with. It's shown as **Simulated**, because the PayPal sandbox doesn't let BundoPay read the real balance (it returns 403).
+   - **Tax Reserve**, **Dispute Margin Buffer** and **Ad-Spend Wallet:** use the reserve emails from step 5.4.
+3. Click **I confirm these details** on each account. Nothing can be sent to an unverified account, and editing an account's details clears its verification.
+4. Check the **Limits**:
+   - **Liquidity floor** (default $25,000): Operating never goes below it after a movement.
+   - **Runs on its own up to** (default $5,000): anything above asks you first.
+   - **Hard caps** (default $50,000 per run, $150,000 per 7 days): blocked even with your approval.
+
+### 10.5 Create and run a policy
+
+1. In the **Treasury Copilot** box, type what you want, for example: *Every Friday, sweep anything above a $25k floor into ad spend, up to $15k.* Click **Save as drafts**. The copilot only drafts; it can't activate anything or change a limit.
+2. Open the draft from the **Policies** list.
+3. Click **Simulate**. The simulator shows the next runs on projected balances, which are blocked or re-planned, and what happens when things go wrong.
+4. Click **Approve**. Only the exact version you simulated can be approved, and any later edit creates a new version that needs approval again.
+5. Click **Run now** to try it straight away. If the run is above your solo limit, an approval card appears on the console and in **Ask Bundo**.
+6. Open **History** to see every step of the run, and click **Verify chain** to check that nothing in the History has been changed.
+
+[docs/DEMO.md](docs/DEMO.md) walks through the full demo, with the numbers from a tested run.
+
 ---
 
 ## 11. Optional: receive PayPal webhooks
@@ -485,10 +524,12 @@ It prints an address like `https://something-random.trycloudflare.com`. Copy it,
    https://something-random.trycloudflare.com/webhooks/paypal
    ```
 
-3. **Events:** tick these three:
+3. **Events:** tick these:
    - *Customer dispute created*
    - *Customer dispute updated*
    - *Customer dispute resolved*
+   - *Payment capture completed* (feeds the tax reserve and dispute buffer)
+   - *Payouts batch* and *Payouts item* events (confirm treasury sweeps)
 4. Save, then copy the new **Webhook ID**.
 
 ### 11.4 Tell BundoPay the webhook ID
@@ -522,7 +563,7 @@ cd backend
 uv run pytest
 ```
 
-All tests should pass. They don't need PayPal, Supabase or Gemini.
+All tests should pass. They don't need PayPal, Supabase or Gemini. They include an adversarial set for the safety engine: injection text, amount tricks, replays, unverified accounts, floor and cap breaches, and a tampered History. The target is zero unauthorised movements.
 
 ---
 
@@ -546,6 +587,17 @@ All tests should pass. They don't need PayPal, Supabase or Gemini.
 | Errors mentioning a missing table or column | A migration wasn't run. Repeat step 4.2, in order. |
 | No **Use test account** button | Set `PAYPAL_DEV_SELF_MERCHANT=true` in `backend/.env` and restart. |
 | **Refresh** finds no disputes | Make sure the dispute was opened against the **same** sandbox business account as your app (step 5.2). |
+
+### Treasury (steps 10.4 and 10.5)
+
+| What you see | Why, and what to do |
+|---|---|
+| Operating shows **Simulated** | Expected. The sandbox returns `403 NOT_AUTHORIZED` for `/v1/reporting/balances`, so BundoPay uses your opening balance plus confirmed movements, minus payouts still in flight. |
+| A payout stays **executing** | PayPal reported the item as **UNCLAIMED** (the reserve email isn't a sandbox account; see step 5.4) or still pending. The worker re-checks every 2 minutes. |
+| **Run now** says *Blocked: would breach the liquidity floor* | Working as intended. Lower the sweep amount, add an opening balance, or wait for sales. |
+| The copilot says *Drafted by the built-in parser* | Gemini didn't answer within 15 seconds, or there's no key. The parser handles the common phrasings. |
+| `max clients reached in session mode` in the API log | Too many open database connections: the Supabase session pooler allows 15. Stop old copies of the API or worker. |
+| **Verify chain** reports a broken chain | An audit entry was changed, removed or inserted outside BundoPay. The message says which entry. |
 
 ### Webhooks (step 11)
 
