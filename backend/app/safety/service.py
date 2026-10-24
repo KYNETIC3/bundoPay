@@ -20,7 +20,7 @@ from app.audit import audit
 from .engine import Context, Limits, Movement, Spent, Trigger, Verdict, check
 
 STATUS_FOR = {"allow": "allowed", "ask": "needs_approval", "block": "blocked"}
-COUNTED = ("allowed", "executing", "succeeded")  # spend that counts against the caps
+COUNTED = ("allowed", "executing", "unconfirmed", "succeeded")  # spend that counts against the caps
 # Blocks the engine raises before a valid row could be stored (bad amount, unknown kind, repeated key).
 UNRECORDABLE = ("3_unknown_kind", "4_bad_amount", "5_duplicate")
 
