@@ -17,6 +17,7 @@ from app.config import get_settings
 from app.db import close_pool, connection, open_pool
 from app.deps import close_gateway
 from app.disputes.sync import sync_dispute, sync_merchant
+from app.executor.service import confirm_pending
 from app.paypal_gateway import PermissionRevokedError
 
 from .queue import claim, complete, enqueue, fail
@@ -32,6 +33,8 @@ async def handle(job: dict) -> None:
         await sync_dispute(UUID(p["merchant_id"]), p["paypal_merchant_id"], p["paypal_dispute_id"])
     elif job["kind"] == "run_agent":
         await run_agent(UUID(p["dispute_id"]))
+    elif job["kind"] == "confirm_payouts":
+        await confirm_pending(UUID(p["merchant_id"]))
     else:
         raise ValueError(f"Unknown job kind {job['kind']}")
 
@@ -42,6 +45,16 @@ async def enqueue_polls() -> None:
         cur = await conn.execute("select id from merchants where grant_status = 'granted'")
         for m in await cur.fetchall():
             await enqueue(conn, "sync_merchant", {"merchant_id": str(m["id"])}, dedupe_key=f"sync:{m['id']}")
+
+
+async def enqueue_payout_checks() -> None:
+    """Fallback for undelivered payout webhooks: settle any batch still in flight."""
+    async with connection() as conn:
+        cur = await conn.execute(
+            "select distinct merchant_id from movements where status in ('executing', 'unconfirmed') and batch_id is not null"
+        )
+        for m in await cur.fetchall():
+            await enqueue(conn, "confirm_payouts", {"merchant_id": str(m["merchant_id"])}, dedupe_key=f"payouts:{m['merchant_id']}")
 
 
 async def drain_forever(idle_sleep: float = 2.0, max_backoff: float = 60.0) -> None:
@@ -83,6 +96,7 @@ async def main() -> None:
     await open_pool()
     scheduler = AsyncIOScheduler()
     scheduler.add_job(enqueue_polls, "interval", minutes=get_settings().poll_interval_minutes)
+    scheduler.add_job(enqueue_payout_checks, "interval", minutes=2)
     scheduler.start()
     await enqueue_polls()
     try:

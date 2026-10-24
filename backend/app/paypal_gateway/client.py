@@ -309,6 +309,26 @@ class PayPalGateway:
         )
         return body.get("trackers", [])
 
+    # ------------------------------------------------------- payouts/balances
+
+    async def create_payout_batch(
+        self, *, sender_batch_id: str, items: list[dict[str, Any]], email_subject: str
+    ) -> dict[str, Any]:
+        """Payouts from the app's own sandbox business account. `sender_batch_id` doubles as the
+        PayPal-Request-Id, so a retried call returns the first response instead of paying twice."""
+        body = {
+            "sender_batch_header": {"sender_batch_id": sender_batch_id, "email_subject": email_subject},
+            "items": items,
+        }
+        return await self._request("POST", "/v1/payments/payouts", json_body=body, request_id=sender_batch_id)
+
+    async def get_payout_batch(self, payout_batch_id: str) -> dict[str, Any]:
+        return await self._request("GET", f"/v1/payments/payouts/{payout_batch_id}", params={"page_size": 1000})
+
+    async def list_balances(self, currency: str) -> dict[str, Any]:
+        """The app account's own balances. The sandbox may return nothing useful; callers fall back."""
+        return await self._request("GET", "/v1/reporting/balances", params={"currency_code": currency})
+
     # -------------------------------------------------------------- webhooks
 
     async def verify_webhook_signature(self, headers: dict[str, str], event: dict[str, Any]) -> bool:

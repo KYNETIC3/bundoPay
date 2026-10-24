@@ -1,5 +1,5 @@
-"""PayPal dispute webhooks: verify the signature with PayPal, then enqueue a re-fetch. Nothing in the
-event body is trusted beyond identifying which dispute to re-fetch."""
+"""PayPal webhooks: verify the signature with PayPal, then enqueue a re-fetch. Nothing in the event body
+is trusted beyond identifying which dispute or payout batch to re-fetch."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 DISPUTE_EVENTS = {"CUSTOMER.DISPUTE.CREATED", "CUSTOMER.DISPUTE.UPDATED", "CUSTOMER.DISPUTE.RESOLVED"}
+PAYOUT_PREFIXES = ("PAYMENT.PAYOUTSBATCH.", "PAYMENT.PAYOUTS-ITEM.")
 
 
 @router.post("/webhooks/paypal")
@@ -35,6 +36,8 @@ async def paypal_webhook(request: Request) -> dict[str, str]:
         log.warning("Rejected webhook with invalid signature: %s", event.get("id"))
         raise HTTPException(400, "Signature verification failed")
 
+    if str(event.get("event_type") or "").startswith(PAYOUT_PREFIXES):
+        return await _payout_event(event)
     if event.get("event_type") not in DISPUTE_EVENTS:
         return {"status": "ignored"}
 
@@ -66,3 +69,23 @@ async def paypal_webhook(request: Request) -> dict[str, str]:
                 data={"event_id": event.get("id"), "event_type": event["event_type"], "dispute_id": dispute_id},
             )
     return {"status": "queued"}
+
+
+async def _payout_event(event: dict) -> dict[str, str]:
+    resource = event.get("resource") or {}
+    batch = (resource.get("batch_header") or {}).get("payout_batch_id") or resource.get("payout_batch_id")
+    if not batch:
+        return {"status": "ignored"}
+    async with connection() as conn:
+        cur = await conn.execute("select distinct merchant_id from movements where paypal_ref = %s", (batch,))
+        merchants = await cur.fetchall()
+        for m in merchants:
+            await enqueue(conn, "confirm_payouts", {"merchant_id": str(m["merchant_id"])}, dedupe_key=f"payouts:{m['merchant_id']}")
+            await audit(
+                conn,
+                "webhook.received",
+                merchant_id=m["merchant_id"],
+                label="provider_verified",
+                data={"event_id": event.get("id"), "event_type": event["event_type"], "payout_batch": batch},
+            )
+    return {"status": "queued" if merchants else "ignored"}
