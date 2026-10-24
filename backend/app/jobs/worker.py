@@ -18,6 +18,9 @@ from app.db import close_pool, connection, open_pool
 from app.deps import close_gateway
 from app.disputes.sync import sync_dispute, sync_merchant
 from app.executor.service import confirm_pending
+from app.safety.engine import Trigger
+from app.treasury.runner import run_policy
+from app.treasury.triggers import TRIGGERS, enqueue_due_policies, on_dispute_synced
 from app.paypal_gateway import PermissionRevokedError
 
 from .queue import claim, complete, enqueue, fail
@@ -31,6 +34,12 @@ async def handle(job: dict) -> None:
         await sync_merchant(UUID(p["merchant_id"]))
     elif job["kind"] == "sync_dispute":
         await sync_dispute(UUID(p["merchant_id"]), p["paypal_merchant_id"], p["paypal_dispute_id"])
+        async with connection() as conn:
+            await on_dispute_synced(conn, p["merchant_id"], p["paypal_dispute_id"], trigger=p.get("trigger", "scheduler"))
+    elif job["kind"] == "run_policy":
+        # Jobs are written only by backend code paths that already established the trigger.
+        source = p["trigger"] if p.get("trigger") in TRIGGERS else "untrusted"
+        await run_policy(UUID(p["merchant_id"]), UUID(p["policy_id"]), trigger=Trigger(source, verified=source in TRIGGERS), slot=p["slot"])
     elif job["kind"] == "run_agent":
         await run_agent(UUID(p["dispute_id"]))
     elif job["kind"] == "confirm_payouts":
@@ -97,6 +106,7 @@ async def main() -> None:
     scheduler = AsyncIOScheduler()
     scheduler.add_job(enqueue_polls, "interval", minutes=get_settings().poll_interval_minutes)
     scheduler.add_job(enqueue_payout_checks, "interval", minutes=2)
+    scheduler.add_job(enqueue_due_policies, "interval", minutes=1)
     scheduler.start()
     await enqueue_polls()
     try:

@@ -17,7 +17,7 @@ from psycopg import AsyncConnection
 
 from app.audit import audit
 
-from .engine import Context, Limits, Movement, Spent, Trigger, Verdict, check
+from .engine import Context, Limits, Movement, PlanVerdict, Spent, Trigger, Verdict, check, check_plan
 
 STATUS_FOR = {"allow": "allowed", "ask": "needs_approval", "block": "blocked"}
 COUNTED = ("allowed", "executing", "unconfirmed", "succeeded")  # spend that counts against the caps
@@ -164,3 +164,99 @@ async def set_movement_status(
         "update movements set status = %s, paypal_ref = coalesce(%s, paypal_ref), updated_at = now() where id = %s",
         (status, paypal_ref, movement_id),
     )
+
+
+@dataclass(frozen=True)
+class GuardedPlan:
+    verdict: PlanVerdict
+    movement_ids: tuple[UUID, ...]
+
+
+async def guard_plan(
+    conn: AsyncConnection,
+    merchant_id: UUID | str,
+    movements: list[Movement],
+    *,
+    trigger: Trigger,
+    authority: bool,
+    approved: bool = False,
+    available: Decimal | None = None,
+    flow_id: UUID | str | None = None,
+    policy_version: str | None = None,
+    plan_id: UUID | str | None = None,
+) -> GuardedPlan:
+    """One run through the engine as a whole. With `plan_id`, this re-checks a plan waiting for approval:
+    its own rows don't count as already used, and they're updated in place."""
+    row = await load_limits(conn, merchant_id)
+    accounts = await verified_accounts(conn, merchant_id)
+    keys = [m.idempotency_key for m in movements if m.idempotency_key]
+    cur = await conn.execute(
+        "select idempotency_key from movements where merchant_id = %s and idempotency_key = any(%s) "
+        "and status <> 'failed' and plan_id is distinct from %s",
+        (merchant_id, keys, plan_id),
+    )
+    used = frozenset(r["idempotency_key"] for r in await cur.fetchall())
+    ctx = Context(
+        currency=row["currency"], limits=_limits(row, None), trigger=trigger, authority=authority, approved=approved,
+        verified_accounts=accounts, spent=await spent(conn, merchant_id), used_keys=used, available=available,
+        floor=Decimal(row["liquidity_floor"]),
+    )
+    verdict = check_plan(movements, ctx)
+    status = STATUS_FOR[verdict.decision]
+    ids: list[UUID] = []
+    for m, item in zip(movements, list(verdict.items) + [None] * (len(movements) - len(verdict.items))):
+        if (item and item.check in UNRECORDABLE) or (item is None and verdict.check in UNRECORDABLE):
+            continue
+        reason = item.reason if item and item.decision == "block" else verdict.reason
+        check_code = item.check if item and item.decision == "block" else verdict.check
+        params = {
+            "m": merchant_id, "f": flow_id, "k": m.kind, "a": m.to_account if m.to_account in accounts else None,
+            "amt": m.amount, "c": m.currency, "key": m.idempotency_key, "pv": policy_version, "t": trigger.source,
+            "v": verdict.decision, "cc": check_code, "r": reason, "s": status, "p": plan_id,
+        }
+        if plan_id is not None:
+            cur = await conn.execute(
+                "update movements set verdict = %(v)s, check_code = %(cc)s, reason = %(r)s, status = %(s)s, updated_at = now() "
+                "where merchant_id = %(m)s and plan_id = %(p)s and idempotency_key = %(key)s returning id",
+                params,
+            )
+            hit = await cur.fetchone()
+            if hit:
+                ids.append(hit["id"])
+                continue
+        if m.amount is None or not isinstance(m.amount, Decimal) or m.amount <= 0:
+            continue
+        cur = await conn.execute(
+            """
+            insert into movements (merchant_id, flow_id, kind, to_account_id, amount, currency, idempotency_key,
+                                   policy_version, trigger_source, verdict, check_code, reason, status, plan_id)
+            values (%(m)s, %(f)s, %(k)s, %(a)s, %(amt)s, %(c)s, %(key)s, %(pv)s, %(t)s, %(v)s, %(cc)s, %(r)s, %(s)s, %(p)s)
+            on conflict (merchant_id, idempotency_key) do update set
+              verdict = excluded.verdict, check_code = excluded.check_code, reason = excluded.reason,
+              status = excluded.status, amount = excluded.amount, flow_id = excluded.flow_id, updated_at = now()
+              where movements.status = 'failed'
+            returning id
+            """,
+            params,
+        )
+        inserted = await cur.fetchone()
+        if inserted is None:
+            verdict = PlanVerdict("block", "5_duplicate", "This movement's idempotency key was already used", verdict.items, verdict.total)
+            break
+        ids.append(inserted["id"])
+    if verdict.check == "5_duplicate" and ids:
+        # Lost a race part-way through: the items already written must not go out on their own.
+        await conn.execute(
+            "update movements set status = 'blocked', verdict = 'block', check_code = '5_duplicate', "
+            "reason = 'Another run took one of this plan''s keys', updated_at = now() where id = any(%s)",
+            (ids,),
+        )
+    await audit(
+        conn, f"safety.{verdict.decision}", merchant_id=merchant_id, flow_id=flow_id, actor="safety_engine",
+        data={
+            "check": verdict.check, "reason": verdict.reason, "total": f"{verdict.total:.2f}", "items": len(movements),
+            "trigger": trigger.source, "approved": approved, "plan_id": str(plan_id) if plan_id else None,
+            "money_moved": "0.00",
+        },
+    )
+    return GuardedPlan(verdict, tuple(ids))
