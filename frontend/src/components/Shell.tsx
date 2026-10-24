@@ -23,6 +23,7 @@ const NAV = [
 ];
 
 const TITLES: [string, string, string][] = [
+  ["/treasury/history", "History", "Every run, decision and payout, one timeline per flow, with a tamper check."],
   ["/treasury/setup", "Accounts & limits", "Where treasury money may go, and how much may move without you."],
   ["/treasury/policy", "Policy", "Every change is a new version: simulate it, read the summary, then approve it."],
   ["/treasury", "Treasury", "Your reserves, the policies that fund them, and every decision the safety engine made."],
