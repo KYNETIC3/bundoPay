@@ -4,25 +4,30 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { money } from "@/lib/format";
-import { CHECK_LABELS, type CopilotResult, KIND_LABELS, type PolicyDoc, WEEKDAYS, changed, treasury } from "@/lib/treasury";
+import { CHECK_LABELS, type CopilotResult, KIND_LABELS, changed, describePolicy, treasury } from "@/lib/treasury";
 
-import { Button, Card, CardTitle, Icon, Pill, SendButton } from "./ui";
+import { Sheet } from "./overlay";
+import { Button, Icon, IconButton, SendButton } from "./ui";
 
 const EXAMPLE =
   "Hold 8.25% of every sale for tax. Keep a dispute buffer of 100% of open disputes plus 2% of 30-day sales. " +
   "Every Friday, sweep anything above a $25k operating floor into ad spend, up to $15k. Auto-run under $5k.";
 
-function describe(d: PolicyDoc, currency: string): string {
-  const s = d.spec;
-  if (s.kind === "tax_reserve") return `Set aside ${Number(s.rate) * 100}% of every capture for tax`;
-  if (s.kind === "dispute_buffer") return `Cover ${Number(s.coverage) * 100}% of open disputes plus ${Number(s.volume_pct) * 100}% of 30-day sales`;
-  if (s.kind === "ad_sweep") return `Every ${WEEKDAYS[s.weekday]} at ${s.hour}:00 UTC, sweep ${money(s.amount, currency)} to ad spend if the floor holds`;
-  return `Daily at ${s.hour}:00 UTC, top up reserves in priority order, then ad spend up to ${money(s.ad_amount, currency)}`;
-}
-
 /** Plain words in, draft policies out. The copilot can't activate anything: drafts still go through the
  * simulator and your approval, and a "move money now" request is shown being blocked by the engine. */
-export function Copilot({ currency, onChanged }: { currency: string; onChanged: () => void }) {
+export function CopilotButton({ currency, onChanged }: { currency: string; onChanged: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <IconButton icon="auto_awesome" label="Draft a policy in plain words" tone="soft" onClick={() => setOpen(true)} />
+      <Sheet open={open} onClose={() => setOpen(false)} title="Treasury Copilot">
+        <Copilot currency={currency} onChanged={onChanged} />
+      </Sheet>
+    </>
+  );
+}
+
+function Copilot({ currency, onChanged }: { currency: string; onChanged: () => void }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<CopilotResult | null>(null);
@@ -50,7 +55,7 @@ export function Copilot({ currency, onChanged }: { currency: string; onChanged: 
     setBusy(true);
     try {
       const r = await treasury.acceptDrafts(result.drafts);
-      setKept(`Saved ${r.created.length} draft${r.created.length === 1 ? "" : "s"}. Open each one below to simulate and approve it.`);
+      setKept(`Saved ${r.created.length} draft${r.created.length === 1 ? "" : "s"}. Open each one in Policies to preview and approve it.`);
       changed();
       onChanged();
     } catch (err) {
@@ -61,13 +66,16 @@ export function Copilot({ currency, onChanged }: { currency: string; onChanged: 
   }
 
   return (
-    <Card>
-      <CardTitle action={<Pill tone="cream"><Icon name="auto_awesome" className="text-[14px]" /> Drafts only</Pill>}>Treasury Copilot</CardTitle>
+    <div>
+      <p className="mb-5 text-sm leading-relaxed text-muted">
+        Describe how you&rsquo;d like money set aside. Copilot drafts the policies; nothing changes until you preview and approve each one.
+      </p>
       <form onSubmit={ask} className="flex items-end gap-2">
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          rows={2}
+          rows={3}
+          data-autofocus
           placeholder="Describe your policy in plain words…"
           aria-label="Describe your treasury policy"
           className="min-h-12 min-w-0 flex-1 resize-y rounded-2xl bg-card px-4 py-3 text-[15px] ring-1 ring-inset ring-ink/30 placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary"
@@ -76,7 +84,7 @@ export function Copilot({ currency, onChanged }: { currency: string; onChanged: 
       </form>
       {!result && (
         <button type="button" onClick={() => setText(EXAMPLE)} className="mt-2 text-left text-[13px] text-primary hover:text-ink">
-          Try: &ldquo;{EXAMPLE.slice(0, 90)}…&rdquo;
+          Try an example
         </button>
       )}
       {error && <p className="mt-3 text-sm text-danger">{error}</p>}
@@ -86,10 +94,9 @@ export function Copilot({ currency, onChanged }: { currency: string; onChanged: 
           {result.intent === "move_now" && result.verdict ? (
             <div className="rounded-[14px] bg-danger-soft px-4 py-3 text-sm">
               <p className="flex items-center gap-2 font-semibold text-danger">
-                <Icon name="block" className="text-[18px]" /> Blocked by the safety engine: {CHECK_LABELS[result.verdict.check] ?? result.verdict.check}
-              </p>
+                <Icon name="block" className="text-[18px]" /> Copilot can&rsquo;t move money</p>
               <p className="mt-1 text-ink-2">
-                {result.verdict.source}. {result.verdict.reason}. {money(result.verdict.money_moved, currency)} moved. The attempt is recorded in History.
+                Money only moves through a policy you approved, or your own tap on an approval. Nothing moved ({CHECK_LABELS[result.verdict.check]?.toLowerCase() ?? "not allowed"}).
               </p>
             </div>
           ) : (
@@ -105,7 +112,7 @@ export function Copilot({ currency, onChanged }: { currency: string; onChanged: 
                   </span>
                   <div className="min-w-0">
                     <p className="text-sm font-semibold">{d.name}</p>
-                    <p className="text-[13px] text-muted">{describe(d, currency)}</p>
+                    <p className="text-[13px] text-muted">{describePolicy(d, currency)}</p>
                   </div>
                 </li>
               ))}
@@ -120,7 +127,7 @@ export function Copilot({ currency, onChanged }: { currency: string; onChanged: 
                 result.limit_suggestions.solo_limit && `auto-running up to ${money(result.limit_suggestions.solo_limit, currency)}`,
               ].filter(Boolean).join(" and ")}
               . Those are account limits, so the copilot can&rsquo;t set them. Check them in{" "}
-              <Link href="/treasury/setup" className="font-semibold text-primary">Accounts &amp; limits</Link>.
+              <Link href="/treasury/setup" className="font-semibold text-primary">Accounts</Link>.
             </p>
           )}
 
@@ -137,10 +144,10 @@ export function Copilot({ currency, onChanged }: { currency: string; onChanged: 
               </Button>
             )}
             {kept && <span className="text-sm font-semibold text-ink-2">{kept}</span>}
-            <span className="text-xs text-muted">{result.source === "model" ? "Drafted by Gemini" : "Drafted by the built-in parser"}; checked by code.</span>
+            <span className="text-xs text-muted">Drafts only: nothing changes until you approve.</span>
           </div>
         </div>
       )}
-    </Card>
+    </div>
   );
 }

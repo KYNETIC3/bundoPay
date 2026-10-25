@@ -1,6 +1,7 @@
 "use client";
 
 import { api, json } from "./api";
+import { money } from "./format";
 
 export type Role = "operating" | "tax_reserve" | "dispute_buffer" | "ad_spend" | "other";
 export type PolicyKind = "tax_reserve" | "dispute_buffer" | "ad_sweep" | "rebalance";
@@ -189,4 +190,163 @@ export const treasury = {
 
 export function changed() {
   window.dispatchEvent(new CustomEvent("disputes-synced"));
+}
+
+// ---------------------------------------------------------------------------------------- plain words
+// Everything below turns engine records into sentences a merchant reads at a glance. Internal ids, hashes and
+// raw payloads never leave this file.
+
+
+/** One sentence describing what a policy does. */
+export function describePolicy(d: PolicyDoc, currency: string): string {
+  const s = d.spec;
+  const pc = (v: string) => `${Math.round(Number(v) * 10000) / 100}%`;
+  if (s.kind === "tax_reserve") return `Sets aside ${pc(s.rate)} of every sale for tax.`;
+  if (s.kind === "dispute_buffer") return `Keeps ${pc(s.coverage)} of open disputes plus ${pc(s.volume_pct)} of 30-day sales aside.`;
+  if (s.kind === "ad_sweep") return `Every ${WEEKDAYS[s.weekday]}, moves ${money(s.amount, currency)} to ad spend if Operating stays above its floor.`;
+  return `Each day, tops up every reserve in priority order${Number(s.ad_amount) > 0 ? `, then ad spend up to ${money(s.ad_amount, currency)}` : ""}.`;
+}
+
+export type State = { label: string; tone: "cerulean" | "plum" | "cream" | "soft" };
+
+/** A policy's state in one or two words. Version numbers stay out of sight. */
+export function policyState(p: Policy): State {
+  const live = active(p);
+  const last = latest(p);
+  if (live && last && last.version > live.version) return { label: p.status === "active" ? "Running, changes to review" : "Changes to review", tone: "plum" };
+  if (p.status === "paused") return { label: "Paused", tone: "cream" };
+  if (p.status === "active") return { label: "Running", tone: "cerulean" };
+  if (last?.created_by === "copilot") return { label: "Draft from Copilot", tone: "soft" };
+  return { label: "Draft", tone: "soft" };
+}
+
+/** A short, human reference for a flow, safe to read out to support. Never the raw id. */
+export function reference(flowId: string | null | undefined): string {
+  return flowId ? `BP-${flowId.replace(/-/g, "").slice(0, 6).toUpperCase()}` : "—";
+}
+
+function kindOf(ref: unknown): PolicyKind | null {
+  const k = String(ref ?? "").split("@")[0];
+  return k in KIND_LABELS ? (k as PolicyKind) : null;
+}
+
+/** "Ad-spend sweep", "Copilot request", …: a flow's title in words. */
+export function flowTitle(policy: string | null, startedBy: string | null): string {
+  const k = kindOf(policy);
+  if (k) return KIND_LABELS[k].title;
+  if (startedBy?.startsWith("copilot")) return "Copilot request";
+  return "Treasury activity";
+}
+
+export type Said = { text: string; tone: "good" | "wait" | "stop" | "quiet"; icon: string };
+
+/** One History entry as a plain sentence, or null when it's bookkeeping no merchant needs to see. */
+export function describeEntry(e: FeedEntry, currency = "USD"): Said | null {
+  const d = e.data_json ?? {};
+  const s = (k: string) => (d[k] == null ? "" : String(d[k]));
+  const amt = (k: string) => (s(k) ? money(s(k), currency) : "");
+  const sum = amt("total") || amt("amount");
+  const check = CHECK_LABELS[s("check")]?.toLowerCase() ?? "a safety check failed";
+  const items = Array.isArray(d.items)
+    ? (d.items as { role: Role; amount: string }[]).map((i) => `${money(i.amount, currency)} to ${ROLE_LABELS[i.role] ?? "another account"}`).join(" and ")
+    : "";
+  const k = kindOf(d.policy);
+  const doc = d.doc as PolicyDoc | undefined;
+  const by = e.label === "ai_assessment" || e.actor?.startsWith("copilot") ? "Copilot" : "You";
+
+  switch (e.event) {
+    case "trigger.verified": {
+      const why = s("slot").startsWith("manual") ? "you asked" : s("slot").startsWith("capture") ? "a sale came in" : "it was scheduled";
+      return { text: `${k ? KIND_LABELS[k].title : "A policy"} started because ${why}`, tone: "quiet", icon: "play_circle" };
+    }
+    case "trigger.unverified": return { text: "A run was ignored because its trigger couldn't be confirmed", tone: "stop", icon: "block" };
+    case "plan.proposed": return { text: items ? `Planned ${items}` : "Planned a transfer", tone: "quiet", icon: "edit_note" };
+    case "plan.rebalanced": return { text: `Adjusted the plan to ${items || "fit"} so Operating stays above its floor`, tone: "quiet", icon: "tune" };
+    case "plan.skipped": return { text: "Nothing to move: every reserve is already on target", tone: "quiet", icon: "check_circle" };
+    case "safety.allow": return { text: `Safety checks passed${sum ? ` for ${sum}` : ""}`, tone: "good", icon: "verified_user" };
+    case "safety.ask": return { text: `${sum || "A transfer"} is waiting for your OK: it's above your auto-run limit`, tone: "wait", icon: "pending_actions" };
+    case "safety.block": return { text: `Stopped ${sum || "a transfer"}: ${check}. Nothing moved`, tone: "stop", icon: "block" };
+    case "approval.granted": return { text: `You approved ${sum || "a transfer"}`, tone: "good", icon: "thumb_up" };
+    case "approval.declined": return { text: "You declined a transfer. Nothing moved", tone: "quiet", icon: "do_not_disturb_on" };
+    case "execution.submitted": return { text: `Sent ${sum || "the transfer"} to PayPal`, tone: "quiet", icon: "send" };
+    case "execution.accepted": return { text: "PayPal accepted the transfer", tone: "good", icon: "task_alt" };
+    case "execution.confirmed": return { text: `PayPal confirmed ${sum || "the payment"}`, tone: "good", icon: "check_circle" };
+    case "execution.failed": return { text: "PayPal turned the transfer down. Nothing moved", tone: "stop", icon: "error" };
+    case "execution.unconfirmed": return { text: "Waiting to hear back from PayPal before trying again", tone: "wait", icon: "hourglass_top" };
+    case "execution.item_failed": return { text: "One payment in the transfer didn't go through", tone: "stop", icon: "error" };
+    case "execution.refused": return { text: "Not sent: the destination account is no longer confirmed", tone: "stop", icon: "block" };
+    case "capture.recorded": return { text: `A sale of ${sum || "money"} came in`, tone: "quiet", icon: "payments" };
+    case "policy.version_drafted": return { text: `${by} drafted ${doc?.name ? `“${doc.name}”` : "a policy"}`, tone: "quiet", icon: by === "Copilot" ? "auto_awesome" : "edit" };
+    case "policy.simulated": return null; // a preview moves nothing
+    case "policy.approved": return { text: "You approved a policy and turned it on", tone: "good", icon: "toggle_on" };
+    case "policy.paused": return { text: "A policy was paused", tone: "quiet", icon: "pause_circle" };
+    case "policy.active": return { text: "A policy was resumed", tone: "quiet", icon: "play_circle" };
+    case "policy.retired": return { text: "A policy was retired", tone: "quiet", icon: "archive" };
+    case "account.added": return { text: `Added the ${s("name") || "new"} account`, tone: "quiet", icon: "add_card" };
+    case "account.edited": return { text: "Updated an account's details", tone: "quiet", icon: "edit" };
+    case "account.verified": return { text: "Confirmed an account's details", tone: "good", icon: "verified" };
+    case "limits.updated": return { text: "Updated your safety limits", tone: "quiet", icon: "shield" };
+    case "copilot.interpreted":
+      return s("intent") === "move_now"
+        ? { text: "Copilot was asked to move money now, which it can't do", tone: "stop", icon: "auto_awesome" }
+        : { text: "Copilot read your request and drafted policies", tone: "quiet", icon: "auto_awesome" };
+    default: return null;
+  }
+}
+
+/** Facts worth keeping from a flow, for its Details panel. Human references only. */
+export function flowFacts(entries: FeedEntry[], currency = "USD"): [string, string][] {
+  const facts: [string, string][] = [];
+  const find = (ev: string) => entries.find((e) => e.event === ev);
+  const val = (e: FeedEntry | undefined, k: string) => (e?.data_json?.[k] == null ? "" : String(e.data_json[k]));
+  const approved = find("approval.granted");
+  if (approved) facts.push(["Approved", `By you at ${new Date(approved.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`]);
+  const batch = val(find("execution.confirmed"), "payout_batch") || val(find("execution.accepted"), "payout_batch");
+  if (batch) facts.push(["PayPal reference", batch]);
+  const total = val(find("execution.confirmed"), "amount") || val(find("safety.allow"), "total");
+  if (total) facts.push(["Amount", money(total, currency)]);
+  const source = entries.some((e) => e.label === "provider_verified") ? "Confirmed by PayPal" : "Recorded by BundoPay";
+  facts.push(["Source", source]);
+  return facts;
+}
+
+/** Spreadsheet-friendly CSV (with a byte-order mark so Excel reads the currency symbols). */
+export function downloadCsv(filename: string, rows: (string | number)[][]) {
+  const cell = (v: string | number) => {
+    const t = String(v);
+    return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+  };
+  const blob = new Blob(["﻿" + rows.map((r) => r.map(cell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+const STATUS_WORDS: Record<string, string> = {
+  allowed: "Approved", executing: "Sending", succeeded: "Completed", confirmed: "Completed", blocked: "Stopped", failed: "Failed",
+  needs_approval: "Waiting for you", declined: "Declined", pending: "Pending", unconfirmed: "Waiting on PayPal",
+};
+
+/** A movement's status in words. */
+export function movementStatus(m: Movement): string {
+  return STATUS_WORDS[m.status] ?? m.status.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+}
+
+/** The statement CSV: one row per movement, oldest last, the way a bank statement reads. */
+export function downloadStatement(movements: Movement[]) {
+  const rows: (string | number)[][] = [["Date", "What happened", "To", "Amount", "Currency", "Status", "Reference"]];
+  for (const m of movements) {
+    rows.push([
+      new Date(m.created_at).toLocaleString(),
+      m.verdict === "block" ? `Stopped: ${CHECK_LABELS[m.check_code ?? ""] ?? "safety check"}` : m.kind === "refund" ? "Refund" : "Transfer between your accounts",
+      m.account_name ?? (m.role ? ROLE_LABELS[m.role] : ""),
+      Number(m.amount).toFixed(2),
+      m.currency,
+      movementStatus(m),
+      reference(m.flow_id),
+    ]);
+  }
+  downloadCsv(`bundopay-treasury-statement-${new Date().toISOString().slice(0, 10)}.csv`, rows);
 }
