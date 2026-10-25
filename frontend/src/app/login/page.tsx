@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Icon } from "@/components/ui";
+import { api } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 
 const field = "w-full rounded-[14px] bg-page px-4 py-3 text-sm ring-1 ring-inset ring-ink/[0.06] focus:outline-none focus:ring-2 focus:ring-aqua";
@@ -15,6 +16,18 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [demoEmail, setDemoEmail] = useState<string | null>(null);
+  const [server, setServer] = useState<"checking" | "waking" | "up" | "down">("checking");
+
+  // Also wakes the hosted API, which sleeps when idle, while the judge types.
+  useEffect(() => {
+    const slow = setTimeout(() => setServer((s) => (s === "checking" ? "waking" : s)), 2500);
+    api<{ enabled: boolean; email: string | null }>("/demo/info")
+      .then((r) => { setDemoEmail(r.enabled ? r.email : null); setServer("up"); })
+      .catch(() => setServer("down"))
+      .finally(() => clearTimeout(slow));
+    return () => clearTimeout(slow);
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -35,6 +48,27 @@ export default function LoginPage() {
       </div>
       <h1 className="text-[32px] font-semibold tracking-[-0.025em]">{mode === "signin" ? "Welcome back" : "Create your account"}</h1>
       <p className="mt-2 text-sm text-muted">Bundo handles your PayPal disputes, within limits you set.</p>
+
+      {demoEmail && mode === "signin" && (
+        <div className="mt-6 rounded-[14px] bg-aqua/10 px-4 py-3 text-sm">
+          <p className="font-medium">Judging BundoPay?</p>
+          <p className="mt-1 text-muted">
+            Sign in as{" "}
+            <button type="button" onClick={() => setEmail(demoEmail)} className="font-medium text-primary underline">
+              {demoEmail}
+            </button>
+            . The password is in the submission&apos;s testing instructions.
+          </p>
+        </div>
+      )}
+      {server === "waking" && (
+        <p className="mt-6 flex items-center gap-2 text-sm text-muted">
+          <Icon name="hourglass_top" className="text-[18px]" /> Waking up the server. This can take up to a minute after a quiet spell.
+        </p>
+      )}
+      {server === "down" && (
+        <p className="mt-6 text-sm text-danger">Can&apos;t reach the BundoPay server right now. Refresh in a minute.</p>
+      )}
 
       <form onSubmit={submit} className="mt-8 space-y-4 rounded-[20px] bg-card p-7 shadow-card">
         <label className="block text-sm">

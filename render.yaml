@@ -1,0 +1,50 @@
+# Render Blueprint for the BundoPay API (free plan). The website runs on Vercel; see docs/SETUP.md, "Host it for judges".
+services:
+  - type: web
+    name: bundopay-api
+    runtime: python
+    plan: free
+    region: frankfurt # pick the region nearest your Supabase project
+    rootDir: backend
+    buildCommand: pip install uv && uv sync --frozen --no-dev
+    startCommand: uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.8"
+      # Free plan has no background workers, so the worker runs inside the API process.
+      - key: RUN_WORKER_IN_PROCESS
+        value: "true"
+      - key: PAYPAL_DEV_SELF_MERCHANT
+        value: "false"
+      - key: FRONTEND_URL
+        sync: false # your Vercel URL, e.g. https://bundopay.vercel.app
+      - key: PAYPAL_PARTNER_CLIENT_ID
+        sync: false
+      - key: PAYPAL_PARTNER_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_PARTNER_MERCHANT_ID
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_PASSWORD
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: APPROVAL_SIGNING_KEY
+        generateValue: true
+      - key: AUDIT_CHAIN_KEY
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DEMO_EMAIL
+        sync: false
+      - key: DEMO_ACCOUNT_EMAILS
+        sync: false

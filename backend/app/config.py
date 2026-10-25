@@ -44,6 +44,17 @@ class Settings(BaseSettings):
     # App.
     frontend_url: str = "http://localhost:3000"
     poll_interval_minutes: int = 15
+    # Run the job worker inside the API process (for hosts with a single free web service, like Render).
+    run_worker_in_process: bool = False
+
+    # Hosted demo. Empty demo_email turns the demo features off.
+    demo_email: str = ""
+    demo_password: str = ""  # read only by `python -m app.demo` when it creates the account
+    # Four sandbox account emails, comma-separated: operating, tax reserve, dispute buffer, ad spend.
+    demo_account_emails: str = ""
+    demo_reset_hour_utc: int = 3
+    # Gemini calls each signed-in user may make per rolling 10 minutes (chat and copilot).
+    llm_requests_per_10_minutes: int = 20
 
 
 @lru_cache

@@ -13,10 +13,49 @@ type DataSummary = { kind: string; rows: number; last_import: string }[];
 export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-[760px] space-y-8">
+      <DemoCard />
       <PayPalCard />
       <RefundLimitCard />
       <StoreDataCard />
     </div>
+  );
+}
+
+function DemoCard() {
+  const { status } = useMerchant();
+  const [demoEmail, setDemoEmail] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<{ email: string | null }>("/demo/info").then((r) => setDemoEmail(r.email)).catch(() => {});
+  }, []);
+  if (!status || !demoEmail || status.email.toLowerCase() !== demoEmail.toLowerCase()) return null;
+
+  async function reset() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await api("/demo/reset", { method: "POST" });
+      setMessage("Done. Treasury, chat and history are back to the starting point.");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Reset failed.");
+    }
+    setBusy(false);
+  }
+
+  return (
+    <Card>
+      <CardTitle>Demo account</CardTitle>
+      <p className="text-sm text-muted">
+        Other judges share this login. Reset puts the treasury accounts, limits, chat and history back to the starting
+        point. It also resets every night. PayPal disputes stay, because they live in the PayPal sandbox.
+      </p>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <Button onClick={reset} disabled={busy}><Icon name="restart_alt" className="text-[18px]" /> Reset demo</Button>
+        {message && <span className="text-sm text-muted">{message}</span>}
+      </div>
+    </Card>
   );
 }
 

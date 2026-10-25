@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 import logging
 from contextlib import asynccontextmanager
 
@@ -6,9 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
-from app.db import close_pool, open_pool
+from app.db import close_pool, connection, open_pool
 from app.deps import close_gateway
 from app.agent.router import router as agent_router
+from app.demo.router import router as demo_router
 from app.disputes.router import router as disputes_router
 from app.events import start_listener, stop_listener
 from app.events_router import router as events_router
@@ -25,7 +28,16 @@ logging.basicConfig(level=logging.INFO)
 async def lifespan(_: FastAPI):
     await open_pool()
     start_listener()
+    worker_task = None
+    if get_settings().run_worker_in_process:
+        from app.jobs.worker import run_in_background
+
+        worker_task = asyncio.create_task(run_in_background())
     yield
+    if worker_task:
+        worker_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await worker_task
     await stop_listener()
     await close_gateway()
     await close_pool()
@@ -76,6 +88,9 @@ async def paypal_error(_: Request, exc: PayPalError) -> JSONResponse:
 
 @app.get("/health")
 async def health() -> dict[str, str]:
+    # Touches the database so the keep-awake ping also keeps the hosted Supabase project active.
+    async with connection() as conn:
+        await conn.execute("select 1")
     return {"status": "ok"}
 
 
@@ -85,3 +100,4 @@ app.include_router(webhooks_router)
 app.include_router(agent_router)
 app.include_router(events_router)
 app.include_router(treasury_router)
+app.include_router(demo_router)
