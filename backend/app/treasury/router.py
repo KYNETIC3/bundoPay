@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field, model_validator
 
 from app.audit import audit, verify_chain
@@ -125,6 +125,26 @@ async def overview(merchant: CurrentMerchant = Depends(current_merchant)) -> dic
         "plans": plans,
         "movements": movements,
     }
+
+
+@router.get("/insights")
+async def insights(
+    days: Annotated[int, Query(ge=1, le=366)] = 90, merchant: CurrentMerchant = Depends(current_merchant)
+) -> dict[str, Any]:
+    """Everything the Insights board charts over a window, without the overview's newest-50 cap on movements."""
+    async with connection() as conn:
+        movements = await (await conn.execute(
+            "select m.id, m.kind, m.amount, m.currency, m.status, m.verdict, m.created_at, a.role from movements m "
+            "left join treasury_accounts a on a.id = m.to_account_id "
+            "where m.merchant_id = %s and m.created_at >= now() - make_interval(days => %s) order by m.created_at",
+            (merchant.id, days),
+        )).fetchall()
+        refunded = await (await conn.execute(
+            "select distinct dispute_id from audit_log where merchant_id = %s and event = 'agent.auto_refund_started' "
+            "and dispute_id is not null and created_at >= now() - make_interval(days => %s)",
+            (merchant.id, days),
+        )).fetchall()
+    return {"movements": movements, "auto_refunded": [str(r["dispute_id"]) for r in refunded]}
 
 
 # The live console log: what the engine, planner and executor wrote to History.
