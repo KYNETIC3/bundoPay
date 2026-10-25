@@ -11,25 +11,16 @@ import { useLive } from "@/lib/hooks";
 import type { Overview as Treasury } from "@/lib/treasury";
 import type { DisputeSummary } from "@/lib/types";
 
-type Overview = {
-  needs_response: number;
-  at_stake: string;
-  due_soon: number;
-  resolved: number;
-  currency: string | null;
-  refunded: string;
-  refund_count: number;
-  auto_count: number;
-};
-
 export default function OverviewPage() {
   const { data: t, error: treasuryError } = useLive<Treasury>("/treasury/overview", 15_000);
-  const { data: o } = useLive<Overview>("/overview");
   const { data: disputes } = useLive<DisputeSummary[]>("/disputes");
   const open = (disputes ?? []).filter((d) => d.status !== "RESOLVED");
   const disputesWaiting = open.filter((d) => (d.status === "WAITING_FOR_SELLER_RESPONSE" && d.draft_status !== "submitted") || d.draft_status === "awaiting_approval").length;
   const transfersWaiting = (t?.plans ?? []).filter((p) => p.status === "needs_approval").length;
-  const currency = t?.limits.currency ?? o?.currency ?? "USD";
+  const currency = t?.limits.currency ?? open.find((d) => d.currency)?.currency ?? "USD";
+  // Worked out from the same list as the count, so cleared disputes never show as money at stake.
+  const atStake = open.reduce((n, d) => n + Number(d.amount ?? 0), 0);
+  const dueSoon = open.filter((d) => d.status === "WAITING_FOR_SELLER_RESPONSE" && d.due_date && new Date(d.due_date).getTime() < Date.now() + 48 * 3600_000).length;
   const needsSetup = t ? !t.accounts.some((a) => a.role === "operating") || t.accounts.every((a) => !a.verified_at) : false;
   const running = (t?.policies ?? []).filter((p) => p.status === "active");
   const next = running.map((p) => p.next_run_at).filter((x): x is string => !!x).sort()[0];
@@ -74,7 +65,7 @@ export default function OverviewPage() {
       <div className="flex flex-col gap-6 lg:flex-row">
         <div className="grid min-w-0 flex-1 gap-6 sm:grid-cols-2">
           <SummaryCard href="/disputes" icon="gavel" title={disputes ? `${open.length} open ${open.length === 1 ? "dispute" : "disputes"}` : "Disputes"}>
-            {o ? `${money(o.at_stake, o.currency ?? currency)} at stake, ${o.due_soon} due within 48h` : ""}
+            {disputes ? (open.length ? `${money(String(atStake), currency)} at stake, ${dueSoon} due within 48h` : "New disputes from PayPal show up automatically.") : ""}
           </SummaryCard>
           <SummaryCard href="/treasury/policies" icon="rule" title={t ? (running.length === 0 ? "No policies running" : `${running.length} ${running.length === 1 ? "policy" : "policies"} running`) : "Policies"}>
             {t ? (next ? `Next run ${when(next)}` : t.policies.length ? "Open Policies to turn one on." : "Add a policy to start setting money aside.") : ""}
