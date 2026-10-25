@@ -3,7 +3,7 @@
 BundoPay is a web app for PayPal merchants. It has two parts:
 
 - **Disputes.** Its assistant, **Bundo**, reviews each new dispute. It refunds the buyer when the amount is within a limit the merchant sets, and asks the merchant first when it isn't.
-- **Treasury.** Policies keep money for tax, open disputes and ad spend in separate reserve accounts. Every movement is simulated first, then checked by a safety engine (plain code, not AI), and approved by you when it's above your limit. It's then sent with PayPal Payouts, and recorded in a hash-linked History.
+- **Treasury.** Policies keep money for tax, open disputes and ad spend in separate reserve accounts. Every movement is simulated first, then checked by a safety engine (plain code, not AI), and approved by you when it's above your limit. It's then sent with PayPal Payouts, and recorded in a hash-linked **Activity** log.
 
 BundoPay runs against the **PayPal sandbox** only, so no real money moves.
 
@@ -353,7 +353,7 @@ Open `backend/.env` in a text editor and fill in these lines. Paste each value r
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase **`service_role` key** |
 | `APPROVAL_SIGNING_KEY` | The string from step 7.2 |
 | `GEMINI_API_KEY` | Your **Gemini key** (step 6), or leave empty |
-| `AUDIT_CHAIN_KEY` | Optional. Another string made like the one in step 7.2. It signs the History chain. Leave it empty to reuse `APPROVAL_SIGNING_KEY`, and don't change it later, or old entries will no longer verify. |
+| `AUDIT_CHAIN_KEY` | Optional. Another string made like the one in step 7.2. It signs the Activity record chain. Leave it empty to reuse `APPROVAL_SIGNING_KEY`, and don't change it later, or old entries will no longer verify. |
 
 Leave every other line as it is. `PAYPAL_WEBHOOK_ID` stays empty unless you do step 11.
 
@@ -600,7 +600,7 @@ cd backend
 uv run pytest
 ```
 
-All tests should pass. They don't need PayPal, Supabase or Gemini. They include an adversarial set for the safety engine: injection text, amount tricks, replays, unverified accounts, floor and cap breaches, and a tampered History. The target is zero unauthorised movements.
+All tests should pass. They don't need PayPal, Supabase or Gemini. They include an adversarial set for the safety engine: injection text, amount tricks, replays, unverified accounts, floor and cap breaches, and tampered records. The target is zero unauthorised movements.
 
 ---
 
