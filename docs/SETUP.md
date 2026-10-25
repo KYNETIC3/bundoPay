@@ -255,6 +255,7 @@ Open `frontend/.env.local` and fill in:
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase **Project URL** |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase **Publishable (anon) key** |
+| `NEXT_PUBLIC_AG_STUDIO_LICENSE` | Optional. Your [AG Studio](https://www.ag-grid.com/studio/react/enterprise-licence/) trial or full licence key. Without it, the Insights charts show a watermark. |
 
 Leave `NEXT_PUBLIC_API_URL` as it is.
 
@@ -411,6 +412,7 @@ Render's free plan sleeps after 15 minutes without visitors, and Supabase pauses
 3. Add these environment variables:
    - `NEXT_PUBLIC_API_URL`: your Render URL, for example `https://bundopay-api.onrender.com`
    - `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`: as in `frontend/.env.local`
+   - `NEXT_PUBLIC_AG_STUDIO_LICENSE` (optional): your AG Studio licence key, as in `frontend/.env.local`
 4. Click **Deploy**.
 
 ### 11.4 Connect the pieces

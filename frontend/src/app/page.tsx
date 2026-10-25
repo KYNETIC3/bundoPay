@@ -1,29 +1,35 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { MoneyBreakdown } from "@/components/treasury";
 import { Button, Card, Empty, Icon, SendButton } from "@/components/ui";
-import { money, when } from "@/lib/format";
+import { when } from "@/lib/format";
 import { useLive } from "@/lib/hooks";
-import type { Overview as Treasury } from "@/lib/treasury";
+import type { Insights, Overview as Treasury } from "@/lib/treasury";
 import type { DisputeSummary } from "@/lib/types";
 
-export default function OverviewPage() {
+// AG Studio measures the page and uses localStorage, so it only ever renders in the browser.
+const InsightsBoard = dynamic(() => import("@/components/InsightsBoard"), { ssr: false, loading: () => <BoardSkeleton /> });
+
+export default function InsightsPage() {
   const { data: t, error: treasuryError } = useLive<Treasury>("/treasury/overview", 15_000);
   const { data: disputes } = useLive<DisputeSummary[]>("/disputes");
+  const { data: insights } = useLive<Insights>("/treasury/insights?days=90", 60_000);
+  const [days, setDays] = useState<7 | 30 | 90>(30);
+  const [editing, setEditing] = useState(false);
+  const [resetSignal, setResetSignal] = useState(0);
   const open = (disputes ?? []).filter((d) => d.status !== "RESOLVED");
   const disputesWaiting = open.filter((d) => (d.status === "WAITING_FOR_SELLER_RESPONSE" && d.draft_status !== "submitted") || d.draft_status === "awaiting_approval").length;
   const transfersWaiting = (t?.plans ?? []).filter((p) => p.status === "needs_approval").length;
   const currency = t?.limits.currency ?? open.find((d) => d.currency)?.currency ?? "USD";
-  // Worked out from the same list as the count, so cleared disputes never show as money at stake.
-  const atStake = open.reduce((n, d) => n + Number(d.amount ?? 0), 0);
-  const dueSoon = open.filter((d) => d.status === "WAITING_FOR_SELLER_RESPONSE" && d.due_date && new Date(d.due_date).getTime() < Date.now() + 48 * 3600_000).length;
   const needsSetup = t ? !t.accounts.some((a) => a.role === "operating") || t.accounts.every((a) => !a.verified_at) : false;
   const running = (t?.policies ?? []).filter((p) => p.status === "active");
   const next = running.map((p) => p.next_run_at).filter((x): x is string => !!x).sort()[0];
+  const hasActivity = !!disputes?.length || !!insights?.movements.length;
 
   return (
     <div className="space-y-10">
@@ -62,32 +68,74 @@ export default function OverviewPage() {
         </p>
       ))}
 
-      <div className="flex flex-col gap-6 lg:flex-row">
-        <div className="grid min-w-0 flex-1 gap-6 sm:grid-cols-2">
-          <SummaryCard href="/disputes" icon="gavel" title={disputes ? `${open.length} open ${open.length === 1 ? "dispute" : "disputes"}` : "Disputes"}>
-            {disputes ? (open.length ? `${money(String(atStake), currency)} at stake, ${dueSoon} due within 48h` : "New disputes from PayPal show up automatically.") : ""}
-          </SummaryCard>
-          <SummaryCard href="/treasury/policies" icon="rule" title={t ? (running.length === 0 ? "No policies running" : `${running.length} ${running.length === 1 ? "policy" : "policies"} running`) : "Policies"}>
-            {t ? (next ? `Next run ${when(next)}` : t.policies.length ? "Open Policies to turn one on." : "Add a policy to start setting money aside.") : ""}
-          </SummaryCard>
+      <section aria-labelledby="trends" className="space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+          <div className="flex items-center gap-3">
+            <h2 id="trends" className="text-[19px] font-semibold tracking-[-0.015em]">Last {days} days</h2>
+            <RangePicker value={days} onChange={setDays} />
+          </div>
+          <div className="flex items-center gap-2">
+            {editing && (
+              <Button variant="ghost" className="min-h-9 text-[13px]" onClick={() => setResetSignal((n) => n + 1)}>Reset layout</Button>
+            )}
+            {/* Building widgets needs a wide screen; phones get the curated board only. */}
+            <span className="hidden sm:contents">
+              <Button variant={editing ? "primary" : "ghost"} className="min-h-9 text-[13px]" onClick={() => setEditing(!editing)}>
+                {editing ? "Done" : <><Icon name="tune" className="text-[16px]" /> Customize</>}
+              </Button>
+            </span>
+          </div>
         </div>
 
-        <ChatToggle />
-      </div>
+        {!insights || !disputes ? (
+          <BoardSkeleton />
+        ) : !hasActivity ? (
+          <Card>
+            <Empty icon="insights" title="Insights fill in as you go">
+              After your first transfers or disputes, you&rsquo;ll see what&rsquo;s at stake, what Bundo handled and what was set aside.
+              {next && <span className="mt-2 block">Next policy run {when(next)}.</span>}
+            </Empty>
+          </Card>
+        ) : (
+          <InsightsBoard currency={currency} disputes={disputes} insights={insights} days={days} editing={editing} resetSignal={resetSignal} />
+        )}
+      </section>
+
+      <div className="flex justify-end"><ChatToggle /></div>
     </div>
   );
 }
 
-function SummaryCard({ href, icon, title, children }: { href: string; icon: string; title: string; children: React.ReactNode }) {
+const RANGES = [7, 30, 90] as const;
+
+function RangePicker({ value, onChange }: { value: number; onChange: (d: (typeof RANGES)[number]) => void }) {
   return (
-    <Link href={href} className="group rounded-[20px] bg-card p-7 shadow-card transition hover:shadow-lift">
-      <div className="flex items-center justify-between">
-        <span className="grid h-10 w-10 place-items-center rounded-xl bg-primary-fixed text-primary"><Icon name={icon} /></span>
-        <Icon name="chevron_right" className="text-muted transition group-hover:translate-x-0.5 group-hover:text-ink" />
-      </div>
-      <p className="mt-5 text-[19px] font-semibold tracking-[-0.015em]">{title}</p>
-      <p className="mt-1 text-sm text-muted">{children}</p>
-    </Link>
+    <div role="radiogroup" aria-label="Time range" className="flex rounded-full bg-soft p-0.5">
+      {RANGES.map((d) => (
+        <button
+          key={d}
+          type="button"
+          role="radio"
+          aria-checked={value === d}
+          onClick={() => onChange(d)}
+          className={`min-h-8 rounded-full px-3 text-[13px] font-medium tabular-nums transition motion-reduce:transition-none ${
+            value === d ? "bg-card text-ink shadow-card" : "text-muted hover:text-ink"
+          }`}
+        >
+          {d}d
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Same footprint as the board, so nothing jumps when AG Studio loads. */
+function BoardSkeleton() {
+  return (
+    <div aria-hidden className="grid h-[480px] grid-cols-2 grid-rows-[144px_1fr] gap-4 sm:grid-cols-4">
+      {[0, 1, 2, 3].map((i) => <div key={i} className="animate-pulse rounded-[20px] bg-card motion-reduce:animate-none" />)}
+      <div className="col-span-2 animate-pulse rounded-[20px] bg-card motion-reduce:animate-none sm:col-span-4" />
+    </div>
   );
 }
 
@@ -107,7 +155,7 @@ function ChatToggle() {
     <div className="shrink-0">
       <div
         className={`flex flex-col overflow-hidden bg-card shadow-card ring-1 ring-ink/40 transition-all duration-300 ease-out motion-reduce:transition-none ${
-          open ? "h-[124px] w-full rounded-[20px] lg:h-full lg:w-[340px]" : "h-12 w-12 rounded-[24px]"
+          open ? "h-[124px] w-full rounded-[20px] sm:w-[340px]" : "h-12 w-12 rounded-[24px]"
         }`}
       >
         <button

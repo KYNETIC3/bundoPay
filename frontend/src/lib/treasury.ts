@@ -72,6 +72,11 @@ export type Movement = {
   account_name: string | null;
   role: Role | null;
 };
+/** `/treasury/insights`: every movement in the window (no newest-50 cap) and the disputes Bundo refunded on its own. */
+export type Insights = {
+  movements: Pick<Movement, "id" | "kind" | "amount" | "currency" | "status" | "verdict" | "created_at" | "role">[];
+  auto_refunded: string[];
+};
 export type Overview = { limits: Limits; positions: Position[]; accounts: Account[]; policies: Policy[]; plans: Plan[]; movements: Movement[] };
 
 export type FeedEntry = {

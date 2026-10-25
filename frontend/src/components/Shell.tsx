@@ -15,7 +15,7 @@ import { Icon } from "./ui";
 const BARE_PATHS = ["/login", "/onboarding", "/onboarding/return"];
 
 const NAV = [
-  { href: "/", label: "Overview", icon: "dashboard" },
+  { href: "/", label: "Insights", icon: "insights" },
   { href: "/treasury", label: "Treasury", icon: "account_balance" },
   { href: "/disputes", label: "Disputes", icon: "gavel" },
   { href: "/agent", label: "Ask Bundo", icon: "forum" },
@@ -28,7 +28,7 @@ const TITLES: [string, string, string][] = [
   ["/disputes", "Disputes", "Everything PayPal has sent you, newest first."],
   ["/agent", "Ask Bundo", ""],
   ["/settings", "Settings", "Your PayPal connection and what Bundo may do on its own."],
-  ["/", "Overview", "Your balance, split by what it's for."],
+  ["/", "Insights", "Your money and disputes, at a glance."],
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
