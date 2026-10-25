@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 
 import { CopilotButton } from "@/components/Copilot";
 import { Menu } from "@/components/overlay";
@@ -13,6 +14,8 @@ import { type FeedEntry, type Overview, downloadStatement } from "@/lib/treasury
 export default function TreasuryPage() {
   const { data, error, reload } = useLive<Overview>("/treasury/overview", 15_000);
   const feed = useLive<{ entries: FeedEntry[] }>("/treasury/feed", 15_000);
+  // The card unmounts once its plan leaves the list, so its outcome is kept here.
+  const [notice, setNotice] = useState<string | null>(null);
 
   if (error) return <Card><p className="text-sm text-danger">{error}</p></Card>;
   if (!data) return <Card><p className="text-sm text-muted">Loading your treasury…</p></Card>;
@@ -62,11 +65,20 @@ export default function TreasuryPage() {
                 key={p.id}
                 plan={{ plan_id: p.id, plan_hash: p.plan_hash, total: p.total, items: p.items_json, status: p.status, reason: p.reason, expires_at: p.expires_at }}
                 currency={currency}
-                onDone={reload}
+                onDone={(said) => {
+                  setNotice(said);
+                  reload();
+                  feed.reload();
+                }}
               />
             ))}
           </div>
         </section>
+      ) : notice ? (
+        <p role="status" className="flex items-center justify-between gap-4 rounded-2xl bg-card px-5 py-4 text-[15px] shadow-card">
+          <span className="flex items-center gap-2"><Icon name="check_circle" className="text-primary" /> {notice}</span>
+          <button onClick={() => setNotice(null)} className="text-sm font-medium text-muted hover:text-ink">Dismiss</button>
+        </p>
       ) : (
         <p className="flex items-center gap-2 text-[15px] text-muted">
           <Icon name="check_circle" className="text-primary" /> Nothing needs you right now.

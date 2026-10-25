@@ -8,7 +8,7 @@ import { dateTime, money, when } from "@/lib/format";
 import { useLive } from "@/lib/hooks";
 import {
   CHECK_LABELS, DEFAULT_SPECS, KIND_LABELS, type Overview, type PolicyDoc, type PolicyKind, ROLE_LABELS, type Simulation,
-  type Spec, WEEKDAYS, active, changed, latest, policyState, treasury,
+  type Spec, WEEKDAYS, active, changed, latest, plainReason, policyState, treasury,
 } from "@/lib/treasury";
 
 const OUTCOME: Record<string, [Tone, string]> = {
@@ -297,7 +297,7 @@ function SimResult({ sim, currency }: { sim: Simulation; currency: string }) {
                 <Pill tone={tone}>{label}</Pill>
               </div>
               {moves && <p className="mt-1 text-[13px] text-ink-2">{r.outcome === "block" ? `Would try ${moves}` : moves}</p>}
-              {r.outcome !== "allow" && <p className="mt-1 text-xs text-muted">{r.outcome === "skip" ? r.reason : `${CHECK_LABELS[r.check] ?? "A safety check"}. ${r.reason}`}</p>}
+              {r.outcome !== "allow" && <p className="mt-1 text-xs text-muted">{r.outcome === "skip" ? r.reason : `${CHECK_LABELS[r.check] ?? "A safety check"}. ${plainReason(r.reason)}`}</p>}
               {r.fallback && r.fallback.length > 0 && (
                 <p className="mt-1 text-xs font-medium text-ink-2">
                   Instead: {r.fallback.map((i) => `${money(i.amount, currency)} to ${ROLE_LABELS[i.to]}`).join(" and ")}

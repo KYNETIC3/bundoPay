@@ -145,7 +145,7 @@ export const CHECK_LABELS: Record<string, string> = {
   "5_duplicate": "Duplicate",
   "6_liquidity_floor": "Would breach the liquidity floor",
   "6_balance_unknown": "Balance unknown",
-  "7_needs_approval": "Above your solo limit",
+  "7_needs_approval": "Above your auto-run limit",
   owner_declined: "You declined",
   nothing_to_do: "Targets already met",
 };
@@ -196,6 +196,11 @@ export function changed() {
 // Everything below turns engine records into sentences a merchant reads at a glance. Internal ids, hashes and
 // raw payloads never leave this file.
 
+
+/** The safety engine's reasons, in the words the rest of the app uses. */
+export function plainReason(reason: string | null | undefined): string {
+  return (reason ?? "").replace(/exceeds the solo limit of/g, "is above your auto-run limit of").replace(/\bsolo limit\b/g, "auto-run limit");
+}
 
 /** One sentence describing what a policy does. */
 export function describePolicy(d: PolicyDoc, currency: string): string {

@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { ago, money, when } from "@/lib/format";
-import { type FeedEntry, type PlanItem, type Position, ROLE_LABELS, type Role, type Said, changed, describeEntry, treasury } from "@/lib/treasury";
+import { type FeedEntry, type PlanItem, type Position, ROLE_LABELS, type Role, type Said, changed, describeEntry, plainReason, treasury } from "@/lib/treasury";
 
 import { Button, Icon, Pill, type Tone, Tooltip } from "./ui";
 
@@ -90,7 +90,7 @@ export function PlanApproval({
 }: {
   plan: { plan_id: string; plan_hash: string; total: string; items: PlanItem[]; status: string; reason?: string; expires_at?: string };
   currency?: string;
-  onDone?: () => void;
+  onDone?: (result: string) => void;
 }) {
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -101,19 +101,20 @@ export function PlanApproval({
     setBusy(kind);
     setError(null);
     try {
+      let said: string;
       if (kind === "approve") {
         const r = await treasury.approvePlan(plan.plan_id, plan.plan_hash);
-        setResult(
+        said =
           r.status === "allowed"
-            ? r.execution === "succeeded" ? "Approved. PayPal confirmed the transfer." : "Approved and sent. Waiting for PayPal to confirm."
-            : `Not sent: something changed since you were asked. ${String(r.reason ?? "")}`,
-        );
+            ? r.execution === "succeeded" ? `Approved. PayPal confirmed the ${money(plan.total, currency)} transfer.` : `Approved. ${money(plan.total, currency)} is on its way; PayPal will confirm it shortly.`
+            : `Not sent: something changed since you were asked. ${plainReason(String(r.reason ?? ""))}`;
       } else {
         await treasury.rejectPlan(plan.plan_id);
-        setResult("Declined. Nothing was sent.");
+        said = `Declined. ${money(plan.total, currency)} stays in Operating; nothing was sent.`;
       }
+      setResult(said);
       changed();
-      onDone?.();
+      onDone?.(said);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -135,7 +136,7 @@ export function PlanApproval({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[22px] font-semibold tabular-nums tracking-[-0.02em]">Move {money(plan.total, currency)}</p>
-          {plan.reason && <p className="mt-1 text-[13px] text-muted">{plan.reason}</p>}
+          {plan.reason && <p className="mt-1 text-[13px] text-muted">{plainReason(plan.reason)}</p>}
         </div>
         {pill && !open && <Pill tone={pill[0]}>{pill[1]}</Pill>}
       </div>
