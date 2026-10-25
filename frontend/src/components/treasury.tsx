@@ -81,6 +81,71 @@ export function TreasuryHero({ positions: unordered, floor, currency, actions }:
   );
 }
 
+// The floor is still Operating money, so it shares Operating's ink but is hatched to read as locked.
+const FLOOR_HATCH = { backgroundImage: "repeating-linear-gradient(135deg, var(--color-ink) 0 3px, color-mix(in srgb, var(--color-ink) 35%, transparent) 3px 6px)" };
+
+const WHAT_FOR: Partial<Record<Role, string>> = {
+  tax_reserve: "Owed as tax, set aside per sale",
+  dispute_buffer: "Covers open disputes and refunds",
+  ad_spend: "Swept here for ads",
+  other: "Set aside",
+};
+
+/** The Overview's lead: one balance, split by what each part of it is actually for. Operating is shown as two
+ * slices, what's free to spend and the floor that must stay put. */
+export function MoneyBreakdown({ positions: unordered, floor, currency, actions }: { positions: Position[]; floor: string; currency: string; actions?: React.ReactNode }) {
+  const positions = [...unordered].sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role));
+  const operating = positions.filter((p) => p.role === "operating").reduce((n, p) => n + Math.max(0, Number(p.balance)), 0);
+  const locked = Math.min(Number(floor), operating);
+  const free = operating - locked;
+  const below = operating < Number(floor);
+
+  type Slice = { key: string; label: string; amount: number; note: string; shade?: string; hatch?: boolean; warn?: boolean };
+  const slices: Slice[] = [
+    { key: "free", label: "Free to spend", amount: free, note: "Yours to use today", shade: "bg-ink" },
+    { key: "floor", label: "Liquidity floor", amount: locked, note: below ? `Below its ${money(floor, currency)} floor` : "Never goes below this", hatch: true, warn: below },
+    ...positions
+      .filter((p) => p.role !== "operating" && (Number(p.balance) > 0 || p.role === "tax_reserve" || p.role === "dispute_buffer"))
+      .map((p) => ({ key: p.account_id, label: p.name, amount: Math.max(0, Number(p.balance)), note: WHAT_FOR[p.role] ?? "", shade: ROLE_SHADE[p.role] })),
+  ];
+  const total = slices.reduce((n, s) => n + s.amount, 0);
+  const kinds = slices.filter((s) => s.amount > 0).length;
+
+  return (
+    <section aria-label="Your balance, by what it's for" className="rounded-[24px] bg-card p-6 shadow-card sm:p-9">
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-[15px] text-muted">Your PayPal balance</p>
+        {actions && <div className="-my-2 -mr-2 flex shrink-0 items-center gap-1">{actions}</div>}
+      </div>
+      <p className="mt-1 break-words text-[34px] font-semibold leading-tight tracking-[-0.03em] tabular-nums sm:text-[48px] sm:leading-none">{money(String(total), currency)}</p>
+      <p className="mt-2.5 text-[15px] text-ink-2">
+        {kinds > 1 ? `Really ${kinds} kinds of money. ` : ""}Only <span className="font-semibold text-ink tabular-nums">{money(String(free), currency)}</span> is free to spend.
+      </p>
+
+      {total > 0 && (
+        <div className="mt-8 flex h-3.5 gap-[3px] overflow-hidden rounded-full" aria-hidden>
+          {slices.map((s) =>
+            s.amount > 0 ? <span key={s.key} className={`${s.shade ?? ""} rounded-full`} style={{ flexGrow: s.amount / total, minWidth: 6, ...(s.hatch ? FLOOR_HATCH : {}) }} /> : null,
+          )}
+        </div>
+      )}
+
+      <ul className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 xl:grid-cols-4">
+        {slices.map((s) => (
+          <li key={s.key} className="min-w-0">
+            <span className="flex min-w-0 items-center gap-2 text-sm text-ink-2">
+              <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${s.shade ?? ""}`} style={s.hatch ? FLOOR_HATCH : undefined} aria-hidden />
+              <span className="truncate">{s.label}</span>
+            </span>
+            <p className="mt-1 pl-[18px] text-[19px] font-semibold tabular-nums tracking-[-0.015em]">{money(String(s.amount), currency)}</p>
+            <p className={`mt-0.5 pl-[18px] text-xs ${s.warn ? "font-semibold text-danger" : "text-muted"}`}>{s.note}</p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /** A transfer the safety engine asked the owner about. Approving is an authenticated tap bound to this exact plan;
  * the server re-runs every check before anything is sent. */
 export function PlanApproval({

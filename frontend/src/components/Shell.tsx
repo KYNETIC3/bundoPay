@@ -28,7 +28,7 @@ const TITLES: [string, string, string][] = [
   ["/disputes", "Disputes", "Everything PayPal has sent you, newest first."],
   ["/agent", "Ask Bundo", ""],
   ["/settings", "Settings", "Your PayPal connection and what Bundo may do on its own."],
-  ["/", "Overview", "What needs you, and what Bundo has done."],
+  ["/", "Overview", "Your balance, split by what it's for."],
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
