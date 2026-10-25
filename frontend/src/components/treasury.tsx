@@ -103,7 +103,7 @@ export function MoneyBreakdown({ positions: unordered, floor, currency, actions 
   type Slice = { key: string; label: string; amount: number; note: string; shade?: string; hatch?: boolean; warn?: boolean };
   const slices: Slice[] = [
     { key: "free", label: "Free to spend", amount: free, note: "Yours to use today", shade: "bg-ink" },
-    { key: "floor", label: "Liquidity floor", amount: locked, note: below ? `Below its ${money(floor, currency)} floor` : "Never goes below this", hatch: true, warn: below },
+    { key: "floor", label: "Liquidity floor", amount: locked, note: below ? `${money(String(Number(floor) - operating), currency)} short of its ${money(floor, currency)} floor` : "Never goes below this", hatch: true, warn: below },
     ...positions
       .filter((p) => p.role !== "operating" && (Number(p.balance) > 0 || p.role === "tax_reserve" || p.role === "dispute_buffer"))
       .map((p) => ({ key: p.account_id, label: p.name, amount: Math.max(0, Number(p.balance)), note: WHAT_FOR[p.role] ?? "", shade: ROLE_SHADE[p.role] })),
