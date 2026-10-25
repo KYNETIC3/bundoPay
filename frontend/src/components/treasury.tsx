@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 
-import { money } from "@/lib/format";
-import { CHECK_LABELS, type FeedEntry, LABEL_COPY, type PlanItem, type Position, ROLE_LABELS, changed, treasury } from "@/lib/treasury";
+import { ago, money, when } from "@/lib/format";
+import { type FeedEntry, type PlanItem, type Position, ROLE_LABELS, type Role, type Said, changed, describeEntry, plainReason, treasury } from "@/lib/treasury";
 
-import { Button, Icon, Pill, type Tone } from "./ui";
+import { Button, Icon, Pill, type Tone, Tooltip } from "./ui";
 
-const ROLE_ICON: Record<string, string> = {
+export const ROLE_ICON: Record<string, string> = {
   operating: "account_balance",
   tax_reserve: "receipt_long",
   dispute_buffer: "shield",
@@ -15,53 +15,82 @@ const ROLE_ICON: Record<string, string> = {
   other: "wallet",
 };
 
-const SOURCE: Record<Position["source"], { label: string; tone: Tone; title: string }> = {
-  paypal: { label: "PayPal balance", tone: "cerulean", title: "Read from PayPal's balance API" },
-  simulated: { label: "Simulated", tone: "cream", title: "Your seeded opening balance plus confirmed movements. PayPal's sandbox didn't return a balance." },
-  ledger: { label: "Ledger", tone: "soft", title: "Opening balance plus movements PayPal confirmed. BundoPay can't read another account's balance." },
+// One shade per account, all from the Bundo palette, darkest for the money the business runs on.
+const ROLE_SHADE: Record<Role, string> = {
+  operating: "bg-ink",
+  tax_reserve: "bg-primary",
+  dispute_buffer: "bg-muted",
+  ad_spend: "bg-aqua",
+  other: "bg-ice",
 };
 
-export function PositionCards({ positions, floor, currency }: { positions: Position[]; floor: string; currency: string }) {
-  if (!positions.length) return null;
+const SOURCE: Record<Position["source"], string> = {
+  paypal: "Balance read from PayPal",
+  simulated: "Your opening balance plus confirmed transfers",
+  ledger: "Opening balance plus transfers PayPal confirmed",
+};
+
+/** The first thing Treasury shows: how much there is, and how it's split. */
+export const ROLE_ORDER: Role[] = ["operating", "tax_reserve", "dispute_buffer", "ad_spend", "other"];
+
+export function TreasuryHero({ positions: unordered, floor, currency, actions }: { positions: Position[]; floor: string; currency: string; actions?: React.ReactNode }) {
+  const positions = [...unordered].sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role));
+  const total = positions.reduce((n, p) => n + Math.max(0, Number(p.balance)), 0);
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4">
-      {positions.map((p) => {
-        const s = SOURCE[p.source];
-        const atFloor = p.role === "operating" && Number(p.balance) <= Number(floor);
-        return (
-          <div key={p.account_id} className="rounded-[20px] bg-card p-5 shadow-card">
-            <div className="flex items-center justify-between gap-2">
-              <span className="flex min-w-0 items-center gap-2 text-sm font-semibold text-ink-2">
-                <Icon name={ROLE_ICON[p.role] ?? "wallet"} className="text-[18px] text-primary" />
-                <span className="truncate">{p.name}</span>
-              </span>
-              <span title={s.title}><Pill tone={s.tone}>{s.label}</Pill></span>
-            </div>
-            <p className="mt-4 break-words text-[26px] font-semibold tabular-nums tracking-[-0.02em]">{money(p.balance, currency)}</p>
-            {p.role === "operating" ? (
-              <p className={`mt-1 text-xs ${atFloor ? "font-semibold text-danger" : "text-muted"}`}>
-                Floor {money(floor, currency)}{atFloor ? ": at or below" : ""}
-              </p>
-            ) : (
-              <p className="mt-1 text-xs text-muted">{ROLE_LABELS[p.role]}</p>
-            )}
-          </div>
-        );
-      })}
-    </div>
+    <section aria-label="Treasury balance" className="rounded-[24px] bg-card p-6 shadow-card sm:p-9">
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-[15px] text-muted">Total in treasury</p>
+        {actions && <div className="-my-2 -mr-2 flex shrink-0 items-center gap-1">{actions}</div>}
+      </div>
+      <p className="mt-1 break-words text-[34px] font-semibold leading-tight tracking-[-0.03em] tabular-nums sm:text-[48px] sm:leading-none">{money(String(total), currency)}</p>
+      <p className="mt-2.5 text-sm text-muted">Held across {positions.length} account{positions.length === 1 ? "" : "s"}</p>
+
+      {total > 0 && (
+        <div className="mt-8 flex h-2.5 gap-[3px] overflow-hidden rounded-full" aria-hidden>
+          {positions.map((p) => {
+            const share = Math.max(0, Number(p.balance)) / total;
+            return share > 0 ? <span key={p.account_id} className={`${ROLE_SHADE[p.role]} rounded-full`} style={{ flexGrow: share, minWidth: 6 }} /> : null;
+          })}
+        </div>
+      )}
+
+      <ul className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 xl:grid-cols-4">
+        {positions.map((p) => {
+          const isOp = p.role === "operating";
+          const below = isOp && Number(p.balance) < Number(floor);
+          const at = isOp && Number(p.balance) === Number(floor);
+          return (
+            <li key={p.account_id} className="min-w-0">
+              <Tooltip label={SOURCE[p.source]} side="top">
+                <span className="flex min-w-0 items-center gap-2 text-sm text-ink-2" tabIndex={0}>
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${ROLE_SHADE[p.role]}`} aria-hidden />
+                  <span className="truncate">{p.name}</span>
+                </span>
+              </Tooltip>
+              <p className="mt-1 pl-4 text-[19px] font-semibold tabular-nums tracking-[-0.015em]">{money(p.balance, currency)}</p>
+              {isOp && (
+                <p className={`mt-0.5 pl-4 text-xs ${below ? "font-semibold text-danger" : at ? "font-medium text-ink-2" : "text-muted"}`}>
+                  {below ? `Below its ${money(floor, currency)} floor` : at ? `At its ${money(floor, currency)} floor` : `Floor ${money(floor, currency)}`}
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
-/** An approval card for a plan the engine asked the owner about. Approving is an authenticated tap bound to
- * the plan hash shown here; the server re-runs every check before anything is sent. */
+/** A transfer the safety engine asked the owner about. Approving is an authenticated tap bound to this exact plan;
+ * the server re-runs every check before anything is sent. */
 export function PlanApproval({
   plan,
   currency = "USD",
   onDone,
 }: {
-  plan: { plan_id: string; plan_hash: string; total: string; items: PlanItem[]; status: string; reason?: string };
+  plan: { plan_id: string; plan_hash: string; total: string; items: PlanItem[]; status: string; reason?: string; expires_at?: string };
   currency?: string;
-  onDone?: () => void;
+  onDone?: (result: string) => void;
 }) {
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,19 +101,20 @@ export function PlanApproval({
     setBusy(kind);
     setError(null);
     try {
+      let said: string;
       if (kind === "approve") {
         const r = await treasury.approvePlan(plan.plan_id, plan.plan_hash);
-        setResult(
+        said =
           r.status === "allowed"
-            ? r.execution === "succeeded" ? "Sent and confirmed by PayPal." : "Sent to PayPal. Waiting for confirmation."
-            : `Blocked on re-check: ${String(r.reason ?? "")}`,
-        );
+            ? r.execution === "succeeded" ? `Approved. PayPal confirmed the ${money(plan.total, currency)} transfer.` : `Approved. ${money(plan.total, currency)} is on its way; PayPal will confirm it shortly.`
+            : `Not sent: something changed since you were asked. ${plainReason(String(r.reason ?? ""))}`;
       } else {
         await treasury.rejectPlan(plan.plan_id);
-        setResult("Declined. Nothing was sent.");
+        said = `Declined. ${money(plan.total, currency)} stays in Operating; nothing was sent.`;
       }
+      setResult(said);
       changed();
-      onDone?.();
+      onDone?.(said);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -93,105 +123,84 @@ export function PlanApproval({
   }
 
   const statusPill: Record<string, [Tone, string]> = {
-    needs_approval: ["plum", "Needs your OK"],
     executed: ["cerulean", "Approved and sent"],
     approved: ["cerulean", "Approved"],
     rejected: ["soft", "Declined"],
-    blocked: ["danger", "Blocked on re-check"],
+    blocked: ["danger", "Not sent"],
     expired: ["soft", "Expired"],
   };
-  const [tone, label] = statusPill[plan.status] ?? ["soft", plan.status];
+  const pill = statusPill[plan.status];
 
   return (
-    <div className="rounded-[14px] bg-card px-4 py-3 ring-1 ring-ink/[0.12]">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-semibold">Move {money(plan.total, currency)}</span>
-        <Pill tone={tone}>{label}</Pill>
+    <div className="rounded-[18px] bg-card p-5 ring-1 ring-ink/[0.08]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[22px] font-semibold tabular-nums tracking-[-0.02em]">Move {money(plan.total, currency)}</p>
+          {plan.reason && <p className="mt-1 text-[13px] text-muted">{plainReason(plan.reason)}</p>}
+        </div>
+        {pill && !open && <Pill tone={pill[0]}>{pill[1]}</Pill>}
       </div>
-      <ul className="mt-2 space-y-1 text-[13px]">
+      <ul className="mt-4 space-y-2 text-sm">
         {plan.items.map((i) => (
           <li key={i.idempotency_key} className="flex justify-between gap-4">
-            <span className="text-muted">→ {ROLE_LABELS[i.role] ?? i.role}</span>
-            <span className="font-semibold tabular-nums">{money(i.amount, currency)}</span>
+            <span className="flex items-center gap-2 text-ink-2">
+              <Icon name={ROLE_ICON[i.role] ?? "wallet"} className="text-[18px] text-muted" /> To {ROLE_LABELS[i.role] ?? "another account"}
+            </span>
+            <span className="font-medium tabular-nums">{money(i.amount, currency)}</span>
           </li>
         ))}
       </ul>
       {open && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-ink/[0.06] pt-3">
-          <Button variant="primary" disabled={!!busy} className="min-h-8 px-3.5 text-[13px]" onClick={() => run("approve")}>
-            <Icon name="check" className="text-[16px]" /> {busy === "approve" ? "Checking and sending" : `Approve ${money(plan.total, currency)}`}
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          <Button variant="primary" disabled={!!busy} onClick={() => run("approve")}>
+            {busy === "approve" ? "Checking and sending…" : `Approve ${money(plan.total, currency)}`}
           </Button>
-          <Button variant="ghost" disabled={!!busy} className="min-h-8 text-[13px] text-danger" onClick={() => run("reject")}>
-            Decline
+          <Button variant="ghost" disabled={!!busy} className="text-muted hover:text-danger" onClick={() => run("reject")}>
+            {busy === "reject" ? "Declining…" : "Decline"}
           </Button>
+          {plan.expires_at && <span className="ml-auto text-xs text-muted">Expires {when(plan.expires_at)}</span>}
         </div>
       )}
-      {result && <p className="mt-2 text-xs font-semibold text-ink-2">{result}</p>}
-      {error && <p className="mt-2 text-xs text-danger">{error}</p>}
+      {result && <p className="mt-4 text-sm font-medium text-ink-2">{result}</p>}
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
     </div>
   );
 }
 
-const EVENT_TONE: Record<string, string> = {
-  "safety.block": "text-[#ff9b8f]",
-  "safety.ask": "text-[#ffd479]",
-  "safety.allow": "text-[#8fe3b0]",
-  "execution.confirmed": "text-[#8fe3b0]",
-  "execution.failed": "text-[#ff9b8f]",
-  "execution.unconfirmed": "text-[#ffd479]",
-  "approval.granted": "text-ice",
+const SAID_TILE: Record<Said["tone"], string> = {
+  good: "bg-primary-fixed text-primary",
+  wait: "bg-ice/50 text-ink",
+  stop: "bg-danger-soft text-danger",
+  quiet: "bg-soft text-muted",
 };
 
-function summary(e: FeedEntry): string {
-  const d = e.data_json as Record<string, unknown>;
-  const pick = (k: string) => (d[k] == null ? null : String(d[k]));
-  if (e.event.startsWith("safety.")) {
-    const check = pick("check") ?? "";
-    return `${check} · ${CHECK_LABELS[check] ?? ""}${pick("total") ? ` · $${pick("total")}` : pick("amount") ? ` · $${pick("amount")}` : ""} · moved $${pick("money_moved") ?? "0.00"}`;
+/** One line per flow (its latest step) plus standalone events, newest first. */
+export function condense(entries: FeedEntry[], currency = "USD"): { e: FeedEntry; said: Said }[] {
+  const seen = new Set<string>();
+  const out: { e: FeedEntry; said: Said }[] = [];
+  for (const e of [...entries].sort((a, b) => b.id - a.id)) {
+    if (e.flow_id) {
+      if (seen.has(e.flow_id)) continue;
+      seen.add(e.flow_id);
+    }
+    const said = describeEntry(e, currency);
+    if (said) out.push({ e, said });
   }
-  if (e.event === "plan.proposed" || e.event === "plan.rebalanced") {
-    const items = (d.items as { role: string; amount: string }[] | undefined) ?? [];
-    return items.map((i) => `${ROLE_LABELS[i.role as keyof typeof ROLE_LABELS] ?? i.role} $${i.amount}`).join(" + ") || "nothing";
-  }
-  if (e.event.startsWith("execution.")) return [pick("payout_batch"), pick("status"), pick("request_id"), pick("error")].filter(Boolean).join(" · ");
-  if (e.event === "approval.granted") return `${pick("token")} · $${pick("total")}`;
-  if (e.event.startsWith("trigger.")) return [pick("policy"), pick("slot")].filter(Boolean).join(" · ");
-  if (e.event.startsWith("capture.")) return `${pick("capture_id")} · $${pick("amount")}`;
-  return Object.entries(d).slice(0, 3).map(([k, v]) => `${k}=${typeof v === "object" ? JSON.stringify(v) : String(v)}`).join(" ");
+  return out;
 }
 
-/** The console's right-hand pane: History entries as they're written, newest first, one line each. */
-export function LiveLog({ entries }: { entries: FeedEntry[] }) {
-  const [raw, setRaw] = useState(false);
+/** Treasury activity in plain sentences. No codes, ids or payloads. */
+export function ActivityList({ items, empty = "Nothing has happened yet." }: { items: { e: FeedEntry; said: Said }[]; empty?: string }) {
+  if (!items.length) return <p className="py-2 text-sm text-muted">{empty}</p>;
   return (
-    <div className="flex h-full min-h-[420px] flex-col overflow-hidden rounded-[20px] bg-ink text-[12.5px] text-white/90 shadow-card">
-      <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
-        <span className="flex items-center gap-2 font-semibold text-white">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-[#8fe3b0]" aria-hidden /> Live treasury log
-        </span>
-        <button onClick={() => setRaw((r) => !r)} className="rounded-full px-2.5 py-1 text-[11px] font-semibold text-ice hover:bg-white/10">
-          {raw ? "Readable" : "Raw JSON"}
-        </button>
-      </div>
-      <ol className="flex-1 space-y-1.5 overflow-y-auto px-4 py-3 font-mono" aria-live="polite">
-        {entries.length === 0 && <li className="text-white/50">Waiting for the first event…</li>}
-        {[...entries].reverse().map((e) =>
-          raw ? (
-            <li key={e.id} className="break-all text-white/80">
-              {JSON.stringify({ t: e.created_at, type: e.event, label: e.label, flow: e.flow_id?.slice(0, 8), chain: e.chain, ...e.data_json })}
-            </li>
-          ) : (
-            <li key={e.id} className="grid grid-cols-[auto_1fr] gap-x-3">
-              <span className="tabular-nums text-white/45">{new Date(e.created_at).toISOString().slice(11, 19)}Z</span>
-              <span className="min-w-0">
-                <span className={`font-semibold ${EVENT_TONE[e.event] ?? "text-white"}`}>{e.event}</span>{" "}
-                <span className="text-white/75">{summary(e)}</span>{" "}
-                <span className="text-white/35">[{LABEL_COPY[e.label]}{e.chain ? ` · ${e.chain}` : ""}]</span>
-              </span>
-            </li>
-          ),
-        )}
-      </ol>
-    </div>
+    <ul className="divide-y divide-ink/[0.06]">
+      {items.map(({ e, said }) => (
+        <li key={e.id} className="flex items-start gap-3.5 py-3.5 first:pt-0 last:pb-0">
+          <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${SAID_TILE[said.tone]}`}><Icon name={said.icon} className="text-[18px]" /></span>
+          <p className="min-w-0 flex-1 pt-1.5 text-sm leading-snug">{said.text}</p>
+          <time dateTime={e.created_at} title={when(e.created_at)} className="shrink-0 pt-1.5 text-xs text-muted">{ago(e.created_at)}</time>
+        </li>
+      ))}
+    </ul>
   );
 }

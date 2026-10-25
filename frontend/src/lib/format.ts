@@ -72,3 +72,26 @@ export function remaining(iso: string | null): { text: string; hours: number } |
   if (hours < 48) return { text: `${Math.floor(hours)}h ${Math.floor((hours % 1) * 60)}m left`, hours };
   return { text: `${Math.floor(hours / 24)} days left`, hours };
 }
+
+/** "just now", "5 min ago", "2 hours ago", "3 days ago": for activity lists where the exact minute rarely matters. */
+export function ago(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 45) return "just now";
+  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  if (s < 3600) return rtf.format(-Math.round(s / 60), "minute");
+  if (s < 86400) return rtf.format(-Math.round(s / 3600), "hour");
+  if (s < 86400 * 14) return rtf.format(-Math.round(s / 86400), "day");
+  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+/** "Fri 30 Oct, 10:00" in the viewer's own time zone. */
+export function when(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+/** "14:02" in the viewer's own time zone. */
+export function clock(iso: string): string {
+  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}

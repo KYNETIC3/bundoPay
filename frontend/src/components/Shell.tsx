@@ -23,14 +23,11 @@ const NAV = [
 ];
 
 const TITLES: [string, string, string][] = [
-  ["/treasury/history", "History", "Every run, decision and payout, one timeline per flow, with a tamper check."],
-  ["/treasury/setup", "Accounts & limits", "Where treasury money may go, and how much may move without you."],
-  ["/treasury/policy", "Policy", "Every change is a new version: simulate it, read the summary, then approve it."],
-  ["/treasury", "Treasury", "Your reserves, the policies that fund them, and every decision the safety engine made."],
+  ["/treasury", "Treasury", "Your money, set aside automatically, within limits you choose."],
   ["/disputes/", "", ""],
   ["/disputes", "Disputes", "Everything PayPal has sent you, newest first."],
   ["/agent", "Ask Bundo", ""],
-  ["/settings", "Settings", "Your PayPal connection, what Bundo may do on its own, and the store data it can use."],
+  ["/settings", "Settings", "Your PayPal connection and what Bundo may do on its own."],
   ["/", "Overview", "What needs you, and what Bundo has done."],
 ];
 
@@ -89,8 +86,8 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
   }, []);
   const [, title, subtitle] = TITLES.find(([p]) => (p === "/" ? pathname === "/" : pathname.startsWith(p))) ?? ["", "BundoPay", ""];
   // Dispute pages carry their own heading; the header only offers a way back.
-  const back = pathname.startsWith("/treasury/")
-    ? { href: "/treasury", label: "Treasury" }
+  const back = pathname === "/treasury/policy"
+    ? { href: "/treasury/policies", label: "Policies" }
     : pathname.endsWith("/approve")
     ? { href: pathname.slice(0, -"/approve".length), label: "Dispute" }
     : pathname.startsWith("/disputes/")

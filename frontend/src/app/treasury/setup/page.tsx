@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-import { Button, Card, CardTitle, Icon, Pill } from "@/components/ui";
-import { money } from "@/lib/format";
+import { ROLE_ICON, ROLE_ORDER } from "@/components/treasury";
+import { Button, Card, CardTitle, Icon, IconButton } from "@/components/ui";
 import { useLive } from "@/lib/hooks";
 import { type Account, type Limits, type Overview, ROLE_LABELS, type Role, changed, treasury } from "@/lib/treasury";
 
@@ -17,13 +17,12 @@ export default function SetupPage() {
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
       <Card>
-        <CardTitle>Treasury accounts</CardTitle>
-        <p className="-mt-2 mb-5 text-sm text-muted">
-          Each reserve is its own PayPal sandbox business account; sweeps are real Payouts to it. A destination must be verified
-          by you before anything can be sent there, and changing its details clears that.
+        <CardTitle>Your accounts</CardTitle>
+        <p className="-mt-2 mb-6 max-w-prose text-sm leading-relaxed text-muted">
+          Money is only ever sent to accounts you&rsquo;ve confirmed. Changing an account&rsquo;s details asks you to confirm it again.
         </p>
-        <div className="space-y-3">
-          {data.accounts.map((a) => <AccountRow key={a.id} a={a} currency={data.limits.currency} onChanged={reload} />)}
+        <div className="divide-y divide-ink/[0.06]">
+          {[...data.accounts].sort((x, y) => ROLE_ORDER.indexOf(x.role) - ROLE_ORDER.indexOf(y.role)).map((a) => <AccountRow key={a.id} a={a} currency={data.limits.currency} onChanged={reload} />)}
         </div>
         {ROLES.some((r) => !taken.has(r)) && <AddAccount roles={ROLES.filter((r) => !taken.has(r))} onAdded={reload} />}
       </Card>
@@ -54,7 +53,7 @@ function AccountRow({ a, currency, onChanged }: { a: Account; currency: string; 
   }
 
   return (
-    <div className="rounded-[14px] px-4 py-3 ring-1 ring-ink/[0.12]">
+    <div className="py-4 first:pt-0 last:pb-0">
       {edit ? (
         <div className="grid gap-3 sm:grid-cols-3">
           <input className={input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} aria-label="Name" />
@@ -66,23 +65,24 @@ function AccountRow({ a, currency, onChanged }: { a: Account; currency: string; 
           </div>
         </div>
       ) : (
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-4">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary-fixed text-primary"><Icon name={ROLE_ICON[a.role] ?? "wallet"} /></span>
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-semibold">{a.name}</span>
-              <Pill tone="soft">{ROLE_LABELS[a.role]}</Pill>
-              {a.verified_at ? <Pill tone="cerulean"><Icon name="verified" className="text-[14px]" /> Verified</Pill> : <Pill tone="danger">Not verified</Pill>}
-            </div>
-            <p className="mt-1 truncate text-[13px] text-muted">
-              {a.paypal_email} · opening balance {money(a.opening_balance, currency)} <span title="Seeded by you for the demo">(simulated)</span>
+            <p className="font-semibold">{a.name}</p>
+            <p className="mt-0.5 truncate text-[13px] text-muted">{a.paypal_email}</p>
+            <p className={`mt-1 flex items-center gap-1 text-[13px] ${a.verified_at ? "text-ink-2" : "font-medium text-danger"}`}>
+              <Icon name={a.verified_at ? "verified" : "error"} className={`text-[16px] ${a.verified_at ? "text-primary" : ""}`} />
+              {a.verified_at ? "Confirmed" : "Not confirmed yet: nothing can be sent here"}
             </p>
           </div>
-          {!a.verified_at && (
-            <Button variant="primary" disabled={busy} className="min-h-9 px-3.5 text-[13px]" onClick={() => run(() => treasury.verifyAccount(a.id))}>
-              I confirm these details
-            </Button>
-          )}
-          <Button className="min-h-9 px-3.5 text-[13px]" onClick={() => setEdit(true)}>Edit</Button>
+          <div className="flex items-center gap-1">
+            {!a.verified_at && (
+              <Button variant="primary" disabled={busy} className="min-h-9 px-3.5 text-[13px]" onClick={() => run(() => treasury.verifyAccount(a.id))}>
+                Confirm details
+              </Button>
+            )}
+            <IconButton icon="edit" label="Edit account" onClick={() => setEdit(true)} />
+          </div>
         </div>
       )}
       {error && <p className="mt-2 text-xs text-danger">{error}</p>}
@@ -151,7 +151,7 @@ function LimitsCard({ limits, onSaved }: { limits: Limits; onSaved: () => void }
     try {
       const { currency: _c, ...rest } = form;
       await treasury.putLimits(rest);
-      setNote("Saved.");
+      setNote("Limits saved.");
       onSaved();
     } catch (err) {
       setNote((err as Error).message);
@@ -162,14 +162,22 @@ function LimitsCard({ limits, onSaved }: { limits: Limits; onSaved: () => void }
 
   return (
     <Card>
-      <CardTitle>Limits</CardTitle>
+      <CardTitle>Safety limits</CardTitle>
+      <p className="-mt-2 mb-6 text-sm leading-relaxed text-muted">Every policy stays inside these, even with your approval.</p>
       <form onSubmit={save} className="space-y-4">
-        {field("liquidity_floor", "Liquidity floor", "Operating never goes below this after a movement.")}
-        {field("solo_limit", "Runs on its own up to", "Anything above asks you with an approval card.")}
-        {field("hard_cap_per_run", "Hard cap per run", "Blocked above this, even with your approval.")}
-        {field("hard_cap_per_week", "Hard cap per 7 days", "Rolling total of everything that moved.")}
-        {field("hard_cap_per_day", "Hard cap per 24 hours", "Optional.", true)}
-        {field("hard_cap_per_month", "Hard cap per 30 days", "Optional.", true)}
+        {field("liquidity_floor", "Always keep in Operating", "Nothing moves if Operating would drop below this.")}
+        {field("solo_limit", "Move on its own up to", "Anything larger waits for your OK.")}
+        {field("hard_cap_per_run", "Never more than, per run", "Stopped above this, even if you approve.")}
+        {field("hard_cap_per_week", "Never more than, per 7 days", "Counts everything moved in the last 7 days.")}
+        <details className="group/more">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-muted hover:text-ink [&::-webkit-details-marker]:hidden">
+            Daily and monthly limits <Icon name="expand_more" className="text-[18px] transition-transform group-open/more:rotate-180" />
+          </summary>
+          <div className="mt-4 space-y-4">
+            {field("hard_cap_per_day", "Never more than, per 24 hours", "Optional.", true)}
+            {field("hard_cap_per_month", "Never more than, per 30 days", "Optional.", true)}
+          </div>
+        </details>
         <div className="flex items-center gap-3">
           <Button variant="primary" disabled={busy}>Save limits</Button>
           {note && <span className="text-sm text-ink-2">{note}</span>}
