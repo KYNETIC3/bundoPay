@@ -6,7 +6,7 @@ Every number below comes from a tested run on 24 Oct 2026, against the sandbox a
 
 ## Before you go on stage
 
-Do the setup in README steps 4 to 10.4 first, including all seven migrations.
+Do the setup in [SETUP.md](SETUP.md) steps 4 to 10.4 first, including all seven migrations.
 
 | Account | Opening balance | Notes |
 |---|---|---|
@@ -15,7 +15,7 @@ Do the setup in README steps 4 to 10.4 first, including all seven migrations.
 | Dispute Margin Buffer | $5,110.00 | |
 | Ad-Spend Wallet | $0.00 | |
 
-- Use real sandbox business account emails for the three reserves (README step 5.4). Otherwise the payout in Beat 4 ends **UNCLAIMED** and the balances won't move.
+- Use real sandbox business account emails for the three reserves ([SETUP.md step 5.4](SETUP.md#54-create-reserve-accounts-for-treasury)). Otherwise the payout in Beat 4 ends **UNCLAIMED** and the balances won't move.
 - Keep the default limits: $25,000 floor, $5,000 solo limit, and $50,000 per run / $150,000 per 7 days hard caps.
 - Verify all four accounts.
 - Open the **Treasury** console in one window. Its right-hand pane is the live log.
@@ -36,7 +36,7 @@ Pay the business from the sandbox buyer account. With webhooks set up (README st
 
 ## Beat 3: a dispute lands (not yet tested live)
 
-Open a sandbox dispute (README step 10.2). The dispute sync raises the buffer target to 100% of open disputes plus 2% of 30-day sales. In the tested run there were no open disputes, so the buffer had nothing to do; the simulator showed every run as *skipped*.
+Open a sandbox dispute ([SETUP.md step 10.2](SETUP.md#102-open-a-test-dispute)). The dispute sync raises the buffer target to 100% of open disputes plus 2% of 30-day sales. In the tested run there were no open disputes, so the buffer had nothing to do; the simulator showed every run as *skipped*.
 
 ## Beat 4: the failure, then the rebalance (tested)
 
