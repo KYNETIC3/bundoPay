@@ -10,19 +10,19 @@ fail() { echo "  ✗ $1"; missing=1; }
 
 echo "Checking tools..."
 missing=0
-command -v git >/dev/null && ok "git" || fail "git: install it (README step 2)"
+command -v git >/dev/null && ok "git" || fail "git: install it (docs/SETUP.md step 2)"
 if command -v python3 >/dev/null && python3 -c 'import sys; sys.exit(sys.version_info < (3, 12))'; then
   ok "python3 $(python3 -c 'import platform; print(platform.python_version())')"
 else
-  fail "Python 3.12 or newer: install it (README step 2)"
+  fail "Python 3.12 or newer: install it (docs/SETUP.md step 2)"
 fi
-command -v uv >/dev/null && ok "uv" || fail "uv: install it, then open a new terminal (README step 2)"
+command -v uv >/dev/null && ok "uv" || fail "uv: install it, then open a new terminal (docs/SETUP.md step 2)"
 if command -v node >/dev/null && [ "$(node -p 'process.versions.node.split(".")[0]')" -ge 20 ]; then
   ok "node $(node --version)"
 else
-  fail "Node.js 20 or newer: install it (README step 2)"
+  fail "Node.js 20 or newer: install it (docs/SETUP.md step 2)"
 fi
-command -v npm >/dev/null && ok "npm" || fail "npm: it comes with Node.js (README step 2)"
+command -v npm >/dev/null && ok "npm" || fail "npm: it comes with Node.js (docs/SETUP.md step 2)"
 [ "$missing" -eq 0 ] || { echo; echo "Install the missing tools, open a new terminal, and run ./setup.sh again."; exit 1; }
 
 echo
@@ -69,9 +69,9 @@ for path, keys in required.items():
         if "YOUR-PASSWORD" in values.get("DATABASE_URL", "") and not values.get("DATABASE_PASSWORD"):
             empty.append(f"{path}: DATABASE_PASSWORD")
         if values.get("PAYPAL_DEV_SELF_MERCHANT", "").lower() != "true":
-            print("  ! PAYPAL_DEV_SELF_MERCHANT isn't true, so there'll be no 'Use test account' button (README step 7.3)")
+            print("  ! PAYPAL_DEV_SELF_MERCHANT isn't true, so there'll be no 'Use test account' button (docs/SETUP.md step 7.3)")
 if empty:
-    print("  Still to fill in (README step 7):")
+    print("  Still to fill in (docs/SETUP.md step 7):")
     for e in empty:
         print("    - " + e)
     print("\nFill these in, then run ./dev.sh")
