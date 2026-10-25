@@ -38,10 +38,12 @@ services:
         sync: false
       - key: SUPABASE_JWT_SECRET
         sync: false
+      # Must match backend/.env exactly: `python -m app.demo` runs on your computer and writes audit
+      # entries and approval tokens that the hosted API checks. Different keys break the audit chain.
       - key: APPROVAL_SIGNING_KEY
-        generateValue: true
+        sync: false
       - key: AUDIT_CHAIN_KEY
-        generateValue: true
+        sync: false # leave empty to reuse APPROVAL_SIGNING_KEY, as in backend/.env
       - key: GEMINI_API_KEY
         sync: false
       - key: DEMO_EMAIL

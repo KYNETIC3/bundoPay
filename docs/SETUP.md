@@ -401,7 +401,7 @@ Render's free plan sleeps after 15 minutes without visitors, and Supabase pauses
    - `FRONTEND_URL`: leave as `https://example.com` for now; you'll fix it in 11.4.
    - `DEMO_EMAIL`: the judge login email.
    - `DEMO_ACCOUNT_EMAILS`: the four emails, separated by commas.
-   - Render makes `APPROVAL_SIGNING_KEY` and `AUDIT_CHAIN_KEY` for you.
+   - `APPROVAL_SIGNING_KEY` and `AUDIT_CHAIN_KEY`: copy them **exactly** from `backend/.env` (leave `AUDIT_CHAIN_KEY` empty if it's empty there). The demo setup in 11.5 runs on your computer, so both sides must sign with the same keys, or **Verify chain** reports a mismatch.
 4. Click **Apply**. When it's live, open `https://<your-service>.onrender.com/health`. It should say `{"status":"ok"}`.
 
 ### 11.3 Deploy the website on Vercel
