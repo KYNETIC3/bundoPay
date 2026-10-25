@@ -3,9 +3,11 @@
 BundoPay is a web app for PayPal merchants. It has two parts:
 
 - **Disputes.** Its assistant, **Bundo**, reviews each new dispute. It refunds the buyer when the amount is within a limit the merchant sets, and asks the merchant first when it isn't.
-- **Treasury.** Policies keep money for tax, open disputes and ad spend in separate reserve accounts. Every movement is simulated first, then checked by a safety engine (plain code, not AI), and approved by you when it's above your limit. It's then sent with PayPal Payouts, and recorded in a hash-linked History.
+- **Treasury.** Policies keep money for tax, open disputes and ad spend in separate reserve accounts. Every movement is simulated first, then checked by a safety engine (plain code, not AI), and approved by you when it's above your limit. It's then sent with PayPal Payouts, and recorded in a hash-linked **Activity** log.
 
 BundoPay runs against the **PayPal sandbox** only, so no real money moves.
+
+> **No Docker needed.** The database is hosted on Supabase's free cloud plan, and PayPal and Gemini are web services. On your computer you only run Python and Node.js.
 
 The app has three parts. The setup below gets all three running on your computer.
 
@@ -14,6 +16,33 @@ The app has three parts. The setup below gets all three running on your computer
 | **API** (Python) | Talks to PayPal, the database and Gemini | http://localhost:8000 |
 | **Worker** (Python) | In the background: checks PayPal for new disputes every 15 minutes, runs treasury policies when they're due, and confirms payouts every 2 minutes | none |
 | **Website** (Next.js) | The dashboard you use | http://localhost:3000 |
+
+## What's new
+
+| Date | Change |
+|---|---|
+| 25 Oct 2026 | **Overview leads with your money.** One bar splits the PayPal balance into free to spend, the liquidity floor, the tax reserve and the dispute buffer. Disputes and policies sit below under **Needs you**. |
+| 25 Oct 2026 | **Calmer Treasury.** It has four tabs: **Overview**, **Policies**, **Activity** and **Accounts**. **Activity** replaces History, describes each event in a plain sentence and checks your records when it opens. **Download statement (CSV)** replaces the JSON export. The Copilot opens in a side sheet. |
+| 24 Oct 2026 | **Treasury.** Reserve accounts, a safety engine, the PayPal Payouts executor, policies with a pre-flight simulator, the Copilot that drafts policies, and a hash-linked audit trail. See [docs/DEMO.md](docs/DEMO.md). |
+| 23 Oct 2026 | **Live dispute updates.** Dispute changes reach the browser right away, without a page reload. |
+| 21–23 Oct 2026 | **Disputes and Bundo.** Dispute sync, auto-refunds within your limit, approvals in **Ask Bundo**, and the calmer design. |
+
+Setup changes in this version: there's a new `./setup.sh` that does steps 7–8 for you, and the example config files now point at hosted Supabase.
+
+## Already set up on another computer?
+
+If you or a teammate already has BundoPay working, you can reuse the same Supabase project, PayPal app and Gemini key. You don't need to create new accounts.
+
+1. Install the tools ([step 2](#2-install-the-tools)) and get the code ([step 3](#3-get-the-code)).
+2. Copy `backend/.env` and `frontend/.env.local` from the working computer into the same places in the new `bundoPay` folder. Send them through a password manager or a USB stick, never by email, chat or Git.
+3. On macOS, run `./setup.sh`. On Windows, do [step 8](#8-install-the-dependencies).
+4. Start the app ([step 9](#9-start-the-app)) and sign in with your existing BundoPay login.
+
+Skip steps 4–7: the database tables, PayPal app and keys already exist.
+
+> **Don't run the API or worker on two computers at the same time** with the same database. Both workers would poll PayPal and run treasury policies, and Supabase's session pooler allows only 15 connections. Stop the app on one computer before you start it on the other.
+
+> If you pulled new code that adds a file in `supabase/migrations/`, run that file in Supabase's SQL Editor once ([step 4.2](#42-create-the-database-tables)). It only needs to be run once per Supabase project, not once per computer.
 
 ## Contents
 
@@ -260,6 +289,14 @@ Bundo uses Gemini to explain disputes and answer your questions.
 
 The API and the website each read their settings from a file. You'll make copies of the example files, then fill in the values you saved.
 
+> **On macOS, `./setup.sh` does most of this step for you.** It checks your tools, copies the example files, generates the approval signing key (7.2), installs the packages (step 8), and lists the settings you still need to fill in. You can run it again at any time: it never overwrites a value you've already filled in.
+>
+> ```bash
+> ./setup.sh
+> ```
+>
+> Then fill in the remaining values (7.3 and 7.4) and go to [step 9](#9-start-the-app).
+
 ### 7.1 Copy the example files
 
 **macOS:**
@@ -316,7 +353,7 @@ Open `backend/.env` in a text editor and fill in these lines. Paste each value r
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase **`service_role` key** |
 | `APPROVAL_SIGNING_KEY` | The string from step 7.2 |
 | `GEMINI_API_KEY` | Your **Gemini key** (step 6), or leave empty |
-| `AUDIT_CHAIN_KEY` | Optional. Another string made like the one in step 7.2. It signs the History chain. Leave it empty to reuse `APPROVAL_SIGNING_KEY`, and don't change it later, or old entries will no longer verify. |
+| `AUDIT_CHAIN_KEY` | Optional. Another string made like the one in step 7.2. It signs the Activity record chain. Leave it empty to reuse `APPROVAL_SIGNING_KEY`, and don't change it later, or old entries will no longer verify. |
 
 Leave every other line as it is. `PAYPAL_WEBHOOK_ID` stays empty unless you do step 11.
 
@@ -344,7 +381,7 @@ Open `frontend/.env.local` and fill in:
 
 ## 8. Install the dependencies
 
-This downloads the packages the API and the website need. It only has to be done once, and again after you pull new code that changes them.
+This downloads the packages the API and the website need. It only has to be done once, and again after you pull new code that changes them. If you ran `./setup.sh`, it's already done.
 
 1. Install the Python packages:
 
@@ -462,24 +499,24 @@ Set the refund limit in **Settings**.
 
 ### 10.4 Set up Treasury
 
-1. Open **Treasury** in the side bar, then **Accounts & limits**.
-2. Add four accounts:
+1. Open **Treasury** in the side bar, then the **Accounts** tab.
+2. Click **Add account** four times:
    - **Operating:** its opening balance is the cash you start with. It's shown as **Simulated**, because the PayPal sandbox doesn't let BundoPay read the real balance (it returns 403).
    - **Tax Reserve**, **Dispute Margin Buffer** and **Ad-Spend Wallet:** use the reserve emails from step 5.4.
-3. Click **I confirm these details** on each account. Nothing can be sent to an unverified account, and editing an account's details clears its verification.
-4. Check the **Limits**:
-   - **Liquidity floor** (default $25,000): Operating never goes below it after a movement.
-   - **Runs on its own up to** (default $5,000): anything above asks you first.
-   - **Hard caps** (default $50,000 per run, $150,000 per 7 days): blocked even with your approval.
+3. Click **Confirm details** on each account. Nothing can be sent to an account that isn't confirmed, and editing an account's details asks you to confirm it again.
+4. Check the **Safety limits** on the same tab:
+   - **Always keep in Operating** (default $25,000): Operating never goes below this after a movement.
+   - **Move on its own up to** (default $5,000): anything above this auto-run limit waits for your OK.
+   - **Never more than, per run** and **per 7 days** (defaults $50,000 and $150,000): blocked even with your approval. Daily and monthly caps are optional.
 
 ### 10.5 Create and run a policy
 
-1. In the **Treasury Copilot** box, type what you want, for example: *Every Friday, sweep anything above a $25k floor into ad spend, up to $15k.* Click **Save as drafts**. The copilot only drafts; it can't activate anything or change a limit.
-2. Open the draft from the **Policies** list.
-3. Click **Simulate**. The simulator shows the next runs on projected balances, which are blocked or re-planned, and what happens when things go wrong.
-4. Click **Approve**. Only the exact version you simulated can be approved, and any later edit creates a new version that needs approval again.
-5. Click **Run now** to try it straight away. If the run is above your solo limit, an approval card appears on the console and in **Ask Bundo**.
-6. Open **History** to see every step of the run, and click **Verify chain** to check that nothing in the History has been changed.
+1. On the **Overview** or **Policies** tab, click **Copilot**. In the **Treasury Copilot** sheet, type what you want, for example: *Every Friday, sweep anything above a $25k floor into ad spend, up to $15k.* Click **Save as drafts**. The Copilot only drafts. It can't turn a policy on or change a limit.
+2. Open the draft from the **Policies** tab.
+3. Click **Preview next runs**. The simulator shows the upcoming runs on projected balances, which ones are blocked or re-planned, and what happens when things go wrong.
+4. Click **Approve and turn on**. Only the exact version you previewed can be approved, and any later edit needs approval again.
+5. Back on **Policies**, click **Run now** to try it straight away. If the run is above your auto-run limit, an approval card appears on Treasury and in **Ask Bundo**.
+6. Open the **Activity** tab to see every step in plain words. It checks your records when it opens and should say *Your records are intact*. Open a flow's **Details** to see its BP- reference, the PayPal batch, and who approved it and when.
 
 [docs/DEMO.md](docs/DEMO.md) walks through the full demo, with the numbers from a tested run.
 
@@ -563,7 +600,7 @@ cd backend
 uv run pytest
 ```
 
-All tests should pass. They don't need PayPal, Supabase or Gemini. They include an adversarial set for the safety engine: injection text, amount tricks, replays, unverified accounts, floor and cap breaches, and a tampered History. The target is zero unauthorised movements.
+All tests should pass. They don't need PayPal, Supabase or Gemini. They include an adversarial set for the safety engine: injection text, amount tricks, replays, unverified accounts, floor and cap breaches, and tampered records. The target is zero unauthorised movements.
 
 ---
 
@@ -576,7 +613,9 @@ All tests should pass. They don't need PayPal, Supabase or Gemini. They include 
 | `Missing backend/.env` or `Missing frontend/.env.local` | You skipped step 7.1. Copy the example files. |
 | `command not found: uv`, `npm` or `python3` | Close the terminal and open a new one. If it still fails, reinstall the tool (step 2). |
 | `Address already in use` / port 8000 or 3000 is taken | An old copy of the app is still running. Stop it with **Ctrl+C**, or close its terminal window. |
-| `./dev.sh: Permission denied` (macOS) | Run `chmod +x dev.sh` once, then try again. |
+| `./dev.sh: Permission denied` or `./setup.sh: Permission denied` (macOS) | Run `chmod +x dev.sh setup.sh` once, then try again. |
+| `supabaseUrl is required`, or the API can't connect to `127.0.0.1` | A Supabase setting is empty. Run `./setup.sh` to see which, and fill it in (step 7). |
+| You're asked to install Docker or run `supabase start` | You don't need either. BundoPay uses hosted Supabase (step 4). |
 
 ### The app starts but something's wrong
 
@@ -597,7 +636,7 @@ All tests should pass. They don't need PayPal, Supabase or Gemini. They include 
 | **Run now** says *Blocked: would breach the liquidity floor* | Working as intended. Lower the sweep amount, add an opening balance, or wait for sales. |
 | The copilot says *Drafted by the built-in parser* | Gemini didn't answer within 15 seconds, or there's no key. The parser handles the common phrasings. |
 | `max clients reached in session mode` in the API log | Too many open database connections: the Supabase session pooler allows 15. Stop old copies of the API or worker. |
-| **Verify chain** reports a broken chain | An audit entry was changed, removed or inserted outside BundoPay. The message says which entry. |
+| **Activity** doesn't say *Your records are intact* | An audit entry was changed, removed or inserted outside BundoPay. The message says which entry. |
 
 ### Webhooks (step 11)
 
