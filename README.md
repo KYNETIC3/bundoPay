@@ -72,6 +72,12 @@ Create an account, click **Use test account**, then open a test dispute. The [Tr
 
 ---
 
+## Host it for judges
+
+To put BundoPay online for free with one shared judge login (Vercel, Render and Supabase, no credit card), follow [step 11 of the guide](docs/SETUP.md#11-host-it-for-judges).
+
+---
+
 ## Getting new updates
 
 When there's new code, run these from the `bundoPay` folder:

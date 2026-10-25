@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.audit import audit, verify_chain
 from app.auth import CurrentMerchant, current_merchant
+from app.deps import llm_rate_limit
 from app.db import connection
 from app.executor.service import positions
 from app.agent.orchestrator import default_llm
@@ -278,7 +279,7 @@ async def reject_plan_route(plan_id: UUID, merchant: CurrentMerchant = Depends(c
 
 
 @router.post("/copilot")
-async def copilot(body: CopilotBody, merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, Any]:
+async def copilot(body: CopilotBody, merchant: CurrentMerchant = Depends(llm_rate_limit)) -> dict[str, Any]:
     """Drafts only. A request to move money now goes to the safety engine as untrusted chat with no
     authority, so it's blocked and recorded; there's no path from here to the executor."""
     result = await interpret(body.text, default_llm())

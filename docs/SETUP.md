@@ -367,3 +367,85 @@ A policy is a rule for moving money, like "every Friday, move spare money into t
 7. Open the **Activity** tab to see every step in plain words.
 
 For a full demo with example numbers, see [DEMO.md](DEMO.md).
+
+---
+
+## 11. Host it for judges
+
+This puts BundoPay online for free, with one shared judge login. No credit card is needed. PayPal stays in test mode.
+
+- **Website:** Vercel (free Hobby plan)
+- **API and worker:** Render (free plan), in one service
+- **Database and logins:** your Supabase project from step 4
+- **Keep-awake:** a GitHub Action pings the API every 10 minutes until 15 Dec 2026
+
+Render's free plan sleeps after 15 minutes without visitors, and Supabase pauses free projects after 7 quiet days. The ping prevents both. GitHub sometimes runs scheduled jobs late, so a judge may still occasionally wait up to a minute; the login page says "Waking up the server" when that happens.
+
+### 11.1 Choose the demo account emails
+
+1. **Judge login.** Pick an email for the shared login, for example `judge@bundopay.test`. It doesn't need to be a real inbox.
+2. **Password.** Make a strong one:
+
+   ```bash
+   python3 -c "import secrets; print(secrets.token_urlsafe(18))"
+   ```
+
+   Keep it somewhere safe. It goes in your Devpost testing instructions, never in the repo.
+3. **Treasury accounts.** Use the four sandbox business emails from [step 5.4](#54-create-reserve-accounts-for-treasury): operating, tax reserve, dispute buffer and ad spend, in that order.
+
+### 11.2 Deploy the API on Render
+
+1. Sign up at [render.com](https://render.com) with GitHub. No card is needed.
+2. Click **New** → **Blueprint** and pick your `bundoPay` repository. Render reads `render.yaml`.
+3. Fill in the values it asks for. They're the same as in `backend/.env`, plus:
+   - `FRONTEND_URL`: leave as `https://example.com` for now; you'll fix it in 11.4.
+   - `DEMO_EMAIL`: the judge login email.
+   - `DEMO_ACCOUNT_EMAILS`: the four emails, separated by commas.
+   - Render makes `APPROVAL_SIGNING_KEY` and `AUDIT_CHAIN_KEY` for you.
+4. Click **Apply**. When it's live, open `https://<your-service>.onrender.com/health`. It should say `{"status":"ok"}`.
+
+### 11.3 Deploy the website on Vercel
+
+1. Sign up at [vercel.com](https://vercel.com) with GitHub (Hobby plan).
+2. Click **Add New** → **Project**, import `bundoPay`, and set **Root Directory** to `frontend`.
+3. Add these environment variables:
+   - `NEXT_PUBLIC_API_URL`: your Render URL, for example `https://bundopay-api.onrender.com`
+   - `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`: as in `frontend/.env.local`
+4. Click **Deploy**.
+
+### 11.4 Connect the pieces
+
+1. **Render:** set `FRONTEND_URL` to your Vercel URL (no trailing slash) and save. Render restarts the API.
+2. **Supabase:** go to **Authentication** → **URL Configuration** and set **Site URL** to your Vercel URL.
+3. **PayPal (optional):** if you use webhooks, change the webhook URL to `https://<your-service>.onrender.com/webhooks/paypal`.
+
+### 11.5 Create the judge login
+
+From the `backend` folder on your computer, with `backend/.env` pointing at the same Supabase project, run:
+
+```bash
+DEMO_EMAIL=judge@bundopay.test DEMO_PASSWORD='the-password' DEMO_ACCOUNT_EMAILS='op@…,tax@…,buffer@…,ads@…' uv run python -m app.demo
+```
+
+It creates the login (or updates its password), connects it to your sandbox business account, and sets up Treasury with the starting balances from [DEMO.md](DEMO.md). Running it again is safe.
+
+The demo resets itself every night at 03:00 UTC. Judges can also click **Settings** → **Reset demo**. A reset clears the demo account's treasury, chat and history. PayPal disputes stay, because they live in the PayPal sandbox.
+
+### 11.6 Turn on the keep-awake ping
+
+1. On GitHub, open the repository's **Settings** → **Secrets and variables** → **Actions**.
+2. Under **Variables**, add:
+   - `BUNDOPAY_API_URL`: your Render URL
+   - `BUNDOPAY_SUPABASE_URL`: your Supabase Project URL
+3. Under **Secrets**, add `BUNDOPAY_SUPABASE_ANON_KEY`: your Supabase anon key.
+4. Open the **Actions** tab, pick **Keep demo awake**, and click **Run workflow** once to check it goes green.
+
+GitHub turns off scheduled workflows after 60 days without a commit, so push at least one commit before then if judging is still running.
+
+### 11.7 Testing instructions for Devpost
+
+Paste something like this into the submission:
+
+> **Live demo:** https://your-app.vercel.app
+> **Login:** judge@bundopay.test / *the-password*
+> The first load can take up to a minute if the server was asleep. Everything runs on the PayPal sandbox; no real money moves. Settings → Reset demo puts it back to the starting point.

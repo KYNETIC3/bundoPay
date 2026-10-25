@@ -1,0 +1,28 @@
+# Pings the hosted API every 10 minutes so Render's free plan doesn't sleep and Supabase's free project
+# doesn't pause. GitHub may delay scheduled runs, so a judge can still occasionally wait for a wake-up.
+name: Keep demo awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      API_URL: ${{ vars.BUNDOPAY_API_URL }}
+      SUPABASE_URL: ${{ vars.BUNDOPAY_SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.BUNDOPAY_SUPABASE_ANON_KEY }}
+    steps:
+      - name: Stop after judging ends (15 Dec 2026)
+        id: window
+        run: |
+          if [ "$(date -u +%Y%m%d)" -gt 20261215 ]; then echo "active=false" >> "$GITHUB_OUTPUT"; else echo "active=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Ping the API (wakes Render and touches the database)
+        if: steps.window.outputs.active == 'true' && env.API_URL != ''
+        run: curl --fail --silent --show-error --retry 5 --retry-delay 15 --retry-all-errors --max-time 90 "$API_URL/health"
+      - name: Ping Supabase Auth
+        if: steps.window.outputs.active == 'true' && env.SUPABASE_URL != '' && env.SUPABASE_ANON_KEY != ''
+        run: curl --fail --silent --show-error --retry 3 --max-time 30 -H "apikey: $SUPABASE_ANON_KEY" "$SUPABASE_URL/auth/v1/health"

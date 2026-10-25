@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.audit import audit
 from app.auth import CurrentMerchant, current_merchant
+from app.deps import llm_rate_limit
 from app.db import connection
 from app.disputes.model import REASON_LABELS
 
@@ -206,7 +207,7 @@ async def mark_read(merchant: CurrentMerchant = Depends(current_merchant)) -> di
 
 
 @router.post("/agent/chat")
-async def agent_chat(body: ChatBody, merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, Any]:
+async def agent_chat(body: ChatBody, merchant: CurrentMerchant = Depends(llm_rate_limit)) -> dict[str, Any]:
     llm = default_llm()
     if llm is None:
         raise HTTPException(503, {"code": "no_model", "message": "Agent chat needs GEMINI_API_KEY in backend/.env."})

@@ -100,13 +100,34 @@ async def _drain_one(idle_sleep: float) -> None:
             await complete(conn, job["id"])
 
 
+def make_scheduler() -> AsyncIOScheduler:
+    settings = get_settings()
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(enqueue_polls, "interval", minutes=settings.poll_interval_minutes)
+    scheduler.add_job(enqueue_payout_checks, "interval", minutes=2)
+    scheduler.add_job(enqueue_due_policies, "interval", minutes=1)
+    if settings.demo_email:
+        from app.demo.service import reset_demo_account
+
+        scheduler.add_job(reset_demo_account, "cron", hour=settings.demo_reset_hour_utc, minute=0)
+    return scheduler
+
+
+async def run_in_background() -> None:
+    """The worker loop for an already-open pool, used when the API process hosts the worker."""
+    scheduler = make_scheduler()
+    scheduler.start()
+    try:
+        await enqueue_polls()
+        await drain_forever()
+    finally:
+        scheduler.shutdown(wait=False)
+
+
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
     await open_pool()
-    scheduler = AsyncIOScheduler()
-    scheduler.add_job(enqueue_polls, "interval", minutes=get_settings().poll_interval_minutes)
-    scheduler.add_job(enqueue_payout_checks, "interval", minutes=2)
-    scheduler.add_job(enqueue_due_policies, "interval", minutes=1)
+    scheduler = make_scheduler()
     scheduler.start()
     await enqueue_polls()
     try:
