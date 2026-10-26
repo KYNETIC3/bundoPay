@@ -29,6 +29,20 @@ export default function LoginPage() {
     return () => clearTimeout(slow);
   }, []);
 
+  async function tryDemo() {
+    setBusy(true);
+    setError(null);
+    try {
+      const tokens = await api<{ access_token: string; refresh_token: string }>("/demo/session", { method: "POST" });
+      const { error } = await supabase().auth.setSession(tokens);
+      if (error) throw error;
+      router.replace("/");
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -51,14 +65,12 @@ export default function LoginPage() {
 
       {demoEmail && mode === "signin" && (
         <div className="mt-6 rounded-[14px] bg-aqua/10 px-4 py-3 text-sm">
-          <p className="font-medium">Judging BundoPay?</p>
-          <p className="mt-1 text-muted">
-            Sign in as{" "}
-            <button type="button" onClick={() => setEmail(demoEmail)} className="font-medium text-primary underline">
-              {demoEmail}
-            </button>
-            . The password is in the submission&apos;s testing instructions.
-          </p>
+          <p className="font-medium">Judging or just looking?</p>
+          <p className="mt-1 text-muted">Open a demo business that&apos;s already connected to the PayPal sandbox. No sign-up.</p>
+          <button type="button" onClick={tryDemo} disabled={busy}
+            className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-full bg-ink px-4 text-sm font-semibold text-white disabled:opacity-60">
+            {busy ? "Opening the demo…" : <>Try the demo <Icon name="arrow_forward" className="text-[18px]" /></>}
+          </button>
         </div>
       )}
       {server === "waking" && (
