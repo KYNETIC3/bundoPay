@@ -271,42 +271,41 @@ class Position:
     account_id: str
     role: str
     name: str
-    balance: Decimal
-    source: str  # paypal | simulated | ledger
+    balance: Decimal | None  # None when PayPal gave no figure; nothing is made up in its place
+    source: str  # paypal (read from PayPal) | confirmed (payouts PayPal confirmed) | unavailable
+    pending: Decimal = Decimal("0")  # sent through PayPal, not yet confirmed as received
 
 
 async def positions(conn: AsyncConnection, merchant_id: UUID | str, *, gateway: PayPalGateway | None = None) -> list[Position]:
-    """Operating comes from PayPal's balance when the sandbox returns one; otherwise from the merchant's
-    seeded opening balance plus confirmed movements, labelled simulated. Reserves are always ledger-derived:
-    BundoPay can't read another account's balance."""
+    """Only figures PayPal stands behind. Operating is PayPal's own balance, or unknown when the sandbox
+    won't return it, and the engine then refuses to move money. Reserves are the payouts PayPal confirmed
+    as received: BundoPay can't read another account's balance, and typed-in opening balances don't count."""
     cur = await conn.execute(
         """
-        select a.id, a.role, a.name, a.opening_balance, coalesce(sum(l.amount), 0) as moved
+        select a.id, a.role, a.name, coalesce(sum(l.amount), 0) as moved
         from treasury_accounts a left join treasury_ledger l on l.account_id = a.id
         where a.merchant_id = %s group by a.id order by a.role, a.name
         """,
         (merchant_id,),
     )
     rows = await cur.fetchall()
-    # Money already handed to PayPal but not yet confirmed has left Operating as far as any new plan is
-    # concerned; counting it as still there would let the next run breach the floor.
+    # Handed to PayPal but not confirmed (pending, or UNCLAIMED by the receiver): shown apart, never as arrived.
     inflight = await conn.execute(
-        "select coalesce(sum(amount), 0) as out from movements where merchant_id = %s and kind = any(%s) "
-        "and status in ('allowed', 'executing', 'unconfirmed')",
+        "select to_account_id, coalesce(sum(amount), 0) as out from movements where merchant_id = %s and kind = any(%s) "
+        "and status in ('allowed', 'executing', 'unconfirmed') group by to_account_id",
         (merchant_id, list(SENDABLE)),
     )
-    pending_out = Decimal((await inflight.fetchone())["out"])
+    pending = {str(r["to_account_id"]): Decimal(r["out"]) for r in await inflight.fetchall()}
     limits = await conn.execute("select currency from treasury_limits where merchant_id = %s", (merchant_id,))
     lim = await limits.fetchone()
     live = await paypal_balance(gateway or get_gateway(), lim["currency"] if lim else "USD")
     out = []
     for r in rows:
-        if r["role"] == "operating" and live is not None:
-            out.append(Position(str(r["id"]), r["role"], r["name"], live, "paypal"))
-        elif r["role"] == "operating":
-            out.append(Position(str(r["id"]), r["role"], r["name"], Decimal(r["opening_balance"]) + Decimal(r["moved"]) - pending_out, "simulated"))
+        if r["role"] == "operating":
+            out.append(Position(str(r["id"]), r["role"], r["name"], live, "paypal" if live is not None else "unavailable",
+                                sum(pending.values(), Decimal("0"))))
         else:
-            out.append(Position(str(r["id"]), r["role"], r["name"], Decimal(r["opening_balance"]) + Decimal(r["moved"]), "ledger"))
+            out.append(Position(str(r["id"]), r["role"], r["name"], Decimal(r["moved"]), "confirmed", pending.get(str(r["id"]), Decimal("0"))))
     return out
 
 
@@ -323,7 +322,7 @@ async def paypal_balance(gw: PayPalGateway, currency: str) -> Decimal | None:
     try:
         body = await gw.list_balances(currency)
     except PayPalError as exc:
-        log.info("Balances unavailable (%s); using the simulated balance", exc.name)
+        log.info("Balances unavailable from PayPal (%s); Operating is unknown", exc.name)
         _balance_cache[currency] = (time.monotonic() + BALANCE_UNAVAILABLE_TTL, None)
         return None
     for b in body.get("balances") or []:

@@ -8,7 +8,6 @@ clean, verifiable chain. It only ever touches the account whose email is DEMO_EM
 from __future__ import annotations
 
 import logging
-from decimal import Decimal
 from uuid import UUID
 
 import httpx
@@ -24,12 +23,12 @@ from app.treasury.router import _details_hash
 
 log = logging.getLogger("demo")
 
-# (role, name, opening balance), in the order of DEMO_ACCOUNT_EMAILS.
+# (role, name), in the order of DEMO_ACCOUNT_EMAILS. No opening balances: every figure shown comes from PayPal.
 DEMO_ACCOUNTS = (
-    ("operating", "Operating", Decimal("33760.00")),
-    ("tax_reserve", "Tax Reserve", Decimal("1023.00")),
-    ("dispute_buffer", "Dispute Margin Buffer", Decimal("5110.00")),
-    ("ad_spend", "Ad-Spend Wallet", Decimal("0.00")),
+    ("operating", "Operating"),
+    ("tax_reserve", "Tax Reserve"),
+    ("dispute_buffer", "Dispute Margin Buffer"),
+    ("ad_spend", "Ad-Spend Wallet"),
 )
 
 # Children before parents; treasury_policy_versions go with their policies.
@@ -73,11 +72,11 @@ async def reset(merchant_id: UUID) -> None:
                 "auto_refund_enabled = true, auto_refund_limit = 20.00 where id = %s",
                 (merchant_id,),
             )
-            for (role, name, balance), email in zip(DEMO_ACCOUNTS, emails):
+            for (role, name), email in zip(DEMO_ACCOUNTS, emails):
                 await conn.execute(
-                    "insert into treasury_accounts (merchant_id, role, name, paypal_email, opening_balance, details_hash, verified_at) "
-                    "values (%s, %s, %s, %s, %s, %s, now())",
-                    (merchant_id, role, name, email, balance, _details_hash(name, email)),
+                    "insert into treasury_accounts (merchant_id, role, name, paypal_email, details_hash, verified_at) "
+                    "values (%s, %s, %s, %s, %s, now())",
+                    (merchant_id, role, name, email, _details_hash(name, email)),
                 )
             await load_limits(conn, merchant_id)  # the runbook's defaults
             await audit(conn, "demo.reset", merchant_id=merchant_id, actor="system", data={"accounts": len(emails)})
