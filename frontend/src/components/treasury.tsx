@@ -30,8 +30,6 @@ const SOURCE: Record<Position["source"], string> = {
   unavailable: "PayPal didn't return a balance for this account",
 };
 
-const UNAVAILABLE_NOTE = "PayPal didn't return your Operating balance, so BundoPay won't move money until it does.";
-
 /** Money handed to PayPal that PayPal hasn't confirmed as received. Shown apart, never counted as arrived. */
 function InFlight({ positions, currency }: { positions: Position[]; currency: string }) {
   const sent = positions.filter((p) => p.role !== "operating" && Number(p.pending) > 0);
@@ -41,7 +39,7 @@ function InFlight({ positions, currency }: { positions: Position[]; currency: st
       {sent.map((p) => (
         <li key={p.account_id} className="flex items-start gap-2">
           <Icon name="schedule_send" className="mt-px shrink-0 text-[18px] text-muted" />
-          <span><span className="font-semibold tabular-nums">{money(p.pending, currency)}</span> sent to {p.name}, not yet confirmed by PayPal</span>
+          <span><span className="font-semibold tabular-nums">{money(p.pending, currency)}</span> to {p.name} · pending</span>
         </li>
       ))}
     </ul>
@@ -67,10 +65,7 @@ export function TreasuryHero({ positions: unordered, floor, currency, actions }:
           <p className="mt-2.5 text-sm text-muted">Held across {positions.length} account{positions.length === 1 ? "" : "s"}, as PayPal reports it</p>
         </>
       ) : (
-        <>
-          <p className="mt-1 text-[28px] font-semibold leading-tight tracking-[-0.03em] sm:text-[36px]">Not available from PayPal</p>
-          <p className="mt-2.5 text-sm text-muted">{UNAVAILABLE_NOTE}</p>
-        </>
+        <p className="mt-1 text-[28px] font-semibold leading-tight tracking-[-0.03em] sm:text-[36px]">Not available</p>
       )}
 
       {known && total > 0 && (
@@ -98,7 +93,7 @@ export function TreasuryHero({ positions: unordered, floor, currency, actions }:
               <p className="mt-1 pl-4 text-[19px] font-semibold tabular-nums tracking-[-0.015em]">{money(p.balance, currency)}</p>
               {isOp ? (
                 <p className={`mt-0.5 pl-4 text-xs ${below ? "font-semibold text-danger" : at ? "font-medium text-ink-2" : "text-muted"}`}>
-                  {p.balance === null ? "Not available from PayPal" : below ? `Below its ${money(floor, currency)} floor` : at ? `At its ${money(floor, currency)} floor` : `Floor ${money(floor, currency)}`}
+                  {p.balance === null ? "Not available" : below ? `Below its ${money(floor, currency)} floor` : at ? `At its ${money(floor, currency)} floor` : `Floor ${money(floor, currency)}`}
                 </p>
               ) : (
                 <p className="mt-0.5 pl-4 text-xs text-muted">Confirmed by PayPal</p>
@@ -160,10 +155,7 @@ export function MoneyBreakdown({ positions: unordered, floor, currency, actions 
           </p>
         </>
       ) : (
-        <>
-          <p className="mt-1 text-[28px] font-semibold leading-tight tracking-[-0.03em] sm:text-[36px]">Not available from PayPal</p>
-          <p className="mt-2.5 text-[15px] text-ink-2">{UNAVAILABLE_NOTE}</p>
-        </>
+        <p className="mt-1 text-[28px] font-semibold leading-tight tracking-[-0.03em] sm:text-[36px]">Not available</p>
       )}
 
       {known && total > 0 && (
