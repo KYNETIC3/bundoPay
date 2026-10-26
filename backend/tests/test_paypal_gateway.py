@@ -197,3 +197,19 @@ async def test_app_own_account_is_called_without_auth_assertion(gateway, paypal)
     assert "PayPal-Auth-Assertion" not in route.calls.last.request.headers
     await gateway.get_dispute("OTHERMERCHANT", "PP-D-1")
     assert "PayPal-Auth-Assertion" in route.calls.last.request.headers
+
+
+async def test_test_sale_order_goes_to_the_merchant_with_an_idempotency_key(gateway, paypal):
+    route = paypal.post("/v2/checkout/orders").mock(return_value=httpx.Response(201, json={"id": "ORD1", "links": []}))
+    await gateway.create_order(merchant_id="M1", amount="100.00", currency="USD", description="t", custom_id="m",
+                               return_url="http://x/r", cancel_url="http://x/c", request_id="ts-1")
+    req = route.calls[0].request
+    assert req.headers["PayPal-Request-Id"] == "ts-1"
+    body = json.loads(req.content)
+    assert body["intent"] == "CAPTURE" and body["purchase_units"][0]["amount"] == {"currency_code": "USD", "value": "100.00"}
+
+
+async def test_capture_order_is_idempotent_per_order(gateway, paypal):
+    route = paypal.post("/v2/checkout/orders/ORD1/capture").mock(return_value=httpx.Response(201, json={"status": "COMPLETED"}))
+    await gateway.capture_order("ORD1", merchant_id="M1", request_id="tc-ORD1")
+    assert route.calls[0].request.headers["PayPal-Request-Id"] == "tc-ORD1"

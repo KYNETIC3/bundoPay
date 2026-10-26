@@ -195,6 +195,11 @@ export const treasury = {
   copilot: (text: string) => api<CopilotResult>("/treasury/copilot", json({ text })),
   acceptDrafts: (drafts: PolicyDoc[]) =>
     api<{ created: { policy_id: string; version: number }[] }>("/treasury/copilot/accept", json({ drafts })),
+  starter: (reserve_email: string) =>
+    api<{ verified: boolean; policy_active: boolean; message: string }>("/treasury/starter", json({ reserve_email })),
+  startTestSale: (amount: string) => api<{ order_id: string; approve_url: string }>("/treasury/test-sale", json({ amount })),
+  finishTestSale: (order_id: string) =>
+    api<{ amount: string; currency: string; recorded: boolean; tax_policy: "ran" | "none" | "already_counted" }>("/treasury/test-sale/capture", json({ order_id })),
   putLimits: (l: Omit<Limits, "currency">) => api("/treasury/limits", { method: "PUT", body: JSON.stringify(l) }),
 };
 
@@ -365,3 +370,13 @@ export function downloadStatement(movements: Movement[]) {
   }
   downloadCsv(`bundopay-treasury-statement-${new Date().toISOString().slice(0, 10)}.csv`, rows);
 }
+
+/** Plain meanings for the words Treasury uses, shown wherever someone might stop and wonder. */
+export const GLOSSARY: { term: string; meaning: string }[] = [
+  { term: "Operating", meaning: "Your connected PayPal account: where sales land and where money moves out of." },
+  { term: "Reserve", meaning: "A separate PayPal account you set money aside into, such as taxes or dispute cover." },
+  { term: "Policy", meaning: "A rule you approve, like \u201cset aside 10% of every sale for tax\u201d. It only runs after you approve it." },
+  { term: "Floor", meaning: "The least that must stay in Operating. Nothing moves if it would drop below this." },
+  { term: "Move on its own up to", meaning: "Transfers up to this amount happen automatically. Bigger ones wait for your OK." },
+  { term: "Sweep", meaning: "A scheduled transfer of spare cash from Operating into a reserve or ad wallet." },
+];

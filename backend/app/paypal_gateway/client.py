@@ -325,6 +325,22 @@ class PayPalGateway:
     async def get_payout_batch(self, payout_batch_id: str) -> dict[str, Any]:
         return await self._request("GET", f"/v1/payments/payouts/{payout_batch_id}", params={"page_size": 1000})
 
+    async def create_order(self, *, merchant_id: str, amount: str, currency: str, description: str, custom_id: str,
+                           return_url: str, cancel_url: str, request_id: str) -> dict[str, Any]:
+        """A sandbox checkout order for a test sale. A sandbox buyer approves it on PayPal, then `capture_order` takes the money."""
+        body = {
+            "intent": "CAPTURE",
+            "purchase_units": [{"description": description, "custom_id": custom_id,
+                                "amount": {"currency_code": currency, "value": amount}}],
+            "payment_source": {"paypal": {"experience_context": {
+                "return_url": return_url, "cancel_url": cancel_url, "user_action": "PAY_NOW", "shipping_preference": "NO_SHIPPING"}}},
+        }
+        return await self._request("POST", "/v2/checkout/orders", merchant_id=merchant_id, json_body=body, request_id=request_id)
+
+    async def capture_order(self, order_id: str, *, merchant_id: str, request_id: str) -> dict[str, Any]:
+        return await self._request("POST", f"/v2/checkout/orders/{order_id}/capture", merchant_id=merchant_id, json_body={},
+                                   request_id=request_id)
+
     async def get_capture(self, capture_id: str) -> dict[str, Any]:
         return await self._request("GET", f"/v2/payments/captures/{capture_id}")
 

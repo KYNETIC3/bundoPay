@@ -15,6 +15,7 @@ from app.audit import audit, verify_chain
 from app.auth import CurrentMerchant, current_merchant
 from app.deps import llm_rate_limit
 from app.db import connection
+from app.config import get_settings
 from app.deps import get_gateway
 from app.events import notify_treasury_changed
 from app.executor.service import batch_key, positions
@@ -25,7 +26,8 @@ from app.safety.service import guard_plan, load_limits
 
 from . import service
 from .copilot import interpret
-from .policy import PolicyDoc
+from .policy import PolicyDoc, TaxReserve, spec_hash
+from .triggers import capture_from_paypal, record_capture
 from .runner import approve_plan, reject_plan, run_policy
 from .service import TreasuryError
 
@@ -463,3 +465,119 @@ async def verify_history(merchant: CurrentMerchant = Depends(current_merchant)) 
         await audit(conn, "history.verified", merchant_id=merchant.id, actor="owner",
                     data={"ok": report.ok, "entries": report.entries, "broken_at": report.broken_at})
     return {"ok": report.ok, "entries": report.entries, "broken_at": report.broken_at, "reason": report.reason}
+
+
+# -------------------------------------------------------------------------------------- test sale
+
+class TestSaleBody(BaseModel):
+    amount: Annotated[Decimal, Field(ge=Decimal("1"), le=Decimal("1000"), decimal_places=2)] = Decimal("100.00")
+
+
+class CaptureBody(BaseModel):
+    order_id: Annotated[str, Field(min_length=5, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")]
+
+
+@router.post("/test-sale")
+async def start_test_sale(body: TestSaleBody, merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, Any]:
+    """Step one of a test sale: a real sandbox order. The tester approves it as a sandbox buyer on PayPal."""
+    async with connection() as conn:
+        currency = (await load_limits(conn, merchant.id))["currency"]
+    front = get_settings().frontend_url.rstrip("/")
+    try:
+        order = await get_gateway().create_order(
+            merchant_id=await _paypal_merchant_id(merchant.id), amount=f"{body.amount:.2f}", currency=currency,
+            description="BundoPay test sale", custom_id=str(merchant.id),
+            return_url=f"{front}/treasury/test-sale", cancel_url=f"{front}/treasury", request_id=f"ts-{uuid4()}")
+    except PayPalError as exc:
+        raise TreasuryError("paypal", f"PayPal couldn't start the test sale: {exc.message or exc.name}", 502) from exc
+    link = next((l["href"] for l in order.get("links", []) if l.get("rel") in ("payer-action", "approve")), None)
+    if not link:
+        raise TreasuryError("paypal", "PayPal didn't return a checkout link", 502)
+    return {"order_id": order["id"], "approve_url": link}
+
+
+@router.post("/test-sale/capture")
+async def finish_test_sale(body: CaptureBody, merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, Any]:
+    """Step two, after the buyer approved: take the payment, re-read it from PayPal, record it, and run the tax policy now."""
+    gw = get_gateway()
+    try:
+        done = await gw.capture_order(body.order_id, merchant_id=await _paypal_merchant_id(merchant.id), request_id=f"tc-{body.order_id}")
+        unit = (done.get("purchase_units") or [{}])[0]
+        cap = ((unit.get("payments") or {}).get("captures") or [{}])[0]
+        if unit.get("custom_id") not in (None, str(merchant.id)) or not cap.get("id"):
+            raise TreasuryError("paypal", "That payment wasn't completed", 409)
+        capture = capture_from_paypal(await gw.get_capture(cap["id"]))
+    except PayPalError as exc:
+        raise TreasuryError("paypal", f"PayPal couldn't complete the test sale: {exc.message or exc.name}", 502) from exc
+    if capture is None:
+        raise TreasuryError("paypal", "PayPal hasn't completed that payment yet. Try again in a moment.", 409)
+    async with connection() as conn:
+        async with conn.transaction():
+            new = await record_capture(conn, merchant.id, capture)
+            row = await (await conn.execute(
+                "select id from treasury_policies where merchant_id = %s and kind = 'tax_reserve' and status = 'active'", (merchant.id,))).fetchone()
+    outcome = None
+    if new and row:
+        outcome = await run_policy(merchant.id, row["id"], trigger=Trigger("webhook", verified=True), slot=f"capture:{capture['id']}")
+    return {"amount": f"{capture['amount']:.2f}", "currency": capture["currency"], "recorded": new,
+            "tax_policy": "ran" if outcome is not None else ("none" if not row else "already_counted"),
+            "result": outcome if isinstance(outcome, dict) else None}
+
+
+async def _paypal_merchant_id(merchant_id: UUID) -> str:
+    async with connection() as conn:
+        row = await (await conn.execute("select paypal_merchant_id from merchants where id = %s", (merchant_id,))).fetchone()
+    if not row or not row["paypal_merchant_id"]:
+        raise TreasuryError("not_connected", "Connect PayPal first (Settings)", 409)
+    return row["paypal_merchant_id"]
+
+
+# -------------------------------------------------------------------------------------- starter
+
+class StarterBody(BaseModel):
+    reserve_email: Email
+
+
+STARTER_LIMITS = {"liquidity_floor": Decimal("0"), "solo_limit": Decimal("500"), "hard_cap_per_run": Decimal("1000"),
+                  "hard_cap_per_week": Decimal("5000")}
+
+
+@router.post("/starter")
+async def starter(body: StarterBody, merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, Any]:
+    """One call to a working setup: Operating (your connected PayPal), one tax reserve, test-friendly limits and a
+    10% tax policy. The reserve is verified with a real $0.01 payout first; the policy is only switched on once it is."""
+    async with connection() as conn:
+        async with conn.transaction():
+            if await (await conn.execute(
+                "select 1 from treasury_policies where merchant_id = %s and kind = 'tax_reserve' and status <> 'retired'", (merchant.id,))).fetchone():
+                raise TreasuryError("exists", "You already have a tax reserve policy. Use Policies to change it.", 409)
+            await load_limits(conn, merchant.id)
+            await conn.execute(
+                "update treasury_limits set liquidity_floor = %s, solo_limit = %s, hard_cap_per_run = %s, hard_cap_per_week = %s, "
+                "movable_when_unknown = coalesce(movable_when_unknown, 1000), updated_at = now() where merchant_id = %s",
+                (*STARTER_LIMITS.values(), merchant.id))
+            op_email = merchant.email or str(body.reserve_email)
+            await conn.execute(
+                "insert into treasury_accounts (merchant_id, role, name, paypal_email, details_hash, verified_at) "
+                "values (%s, 'operating', 'Operating', %s, %s, now()) on conflict do nothing",
+                (merchant.id, op_email, _details_hash("Operating", op_email)))
+            await conn.execute(
+                "insert into treasury_accounts (merchant_id, role, name, paypal_email, details_hash) "
+                "values (%s, 'tax_reserve', 'Tax Reserve', %s, %s) on conflict do nothing",
+                (merchant.id, str(body.reserve_email), _details_hash("Tax Reserve", body.reserve_email)))
+            acct = await (await conn.execute(
+                "select id, paypal_email from treasury_accounts where merchant_id = %s and role = 'tax_reserve'", (merchant.id,))).fetchone()
+            await audit(conn, "limits.updated", merchant_id=merchant.id, actor="owner", data={"starter": True})
+    if acct["paypal_email"].lower() != str(body.reserve_email).lower():
+        raise TreasuryError("exists", f"Your Tax Reserve already uses {acct['paypal_email']}. Edit it under Accounts.", 409)
+    result = await verify_account(acct["id"], merchant)
+    if not result["verified"]:
+        return {"verified": False, "policy_active": False, "message": result["message"]}
+    doc = PolicyDoc(name="Tax reserve 10%", spec=TaxReserve(rate=Decimal("0.10")))
+    async with connection() as conn:
+        async with conn.transaction():
+            made = await service.create_policy(conn, merchant.id, doc, created_by="owner")
+            pid = made["policy_id"] if "policy_id" in made else made["id"]
+            await service.simulate_version(conn, merchant.id, pid, 1)
+            await service.approve_version(conn, merchant.id, pid, 1, spec_hash_seen=spec_hash(doc), approver=merchant.email)
+    return {"verified": True, "policy_active": True, "message": "You're set up. 10% of each sale will be set aside."}

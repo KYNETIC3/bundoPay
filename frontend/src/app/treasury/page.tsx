@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { CopilotButton } from "@/components/Copilot";
 import { Menu } from "@/components/overlay";
+import { Glossary, StarterSetup, TryItChecklist } from "@/components/starter";
 import { ActivityList, PlanApproval, TreasuryHero, condense } from "@/components/treasury";
 import { Button, Card, Empty, Icon } from "@/components/ui";
 import { money, when } from "@/lib/format";
@@ -28,17 +29,11 @@ export default function TreasuryPage() {
   const next = running.map((p) => p.next_run_at).filter((t): t is string => !!t).sort()[0];
   const recent = condense(feed.data?.entries ?? [], currency).slice(0, 5);
 
-  if (needsSetup) {
-    return (
-      <Card>
-        <Empty icon="account_balance" title="Set up your treasury accounts">
-          Add the account your business runs on, then the reserves money is set aside into. Nothing moves until you&rsquo;ve
-          confirmed each one.
-          <div className="mt-5"><Button variant="primary" href="/treasury/setup">Add accounts</Button></div>
-        </Empty>
-      </Card>
-    );
-  }
+  if (needsSetup) return <StarterSetup onDone={reload} />;
+
+  const reserveVerified = !noReserve;
+  const hasMove = data.movements.some((m) => m.status === "succeeded");
+  const hasSale = hasMove || data.movements.length > 0 || feed.data?.entries.some((e) => e.event.startsWith("capture.")) === true;
 
   return (
     <div className="space-y-10">
@@ -96,6 +91,8 @@ export default function TreasuryPage() {
         </p>
       )}
 
+      {!hasMove && <TryItChecklist reserveVerified={reserveVerified} hasSale={hasSale} hasMove={hasMove} />}
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
         <div className="flex flex-col gap-6">
         <Link href="/treasury/policies" className="group rounded-[20px] bg-card p-7 shadow-card transition hover:shadow-lift">
@@ -135,6 +132,8 @@ export default function TreasuryPage() {
           <ActivityList items={recent} empty={feed.data ? "Nothing has happened yet. Every transfer, including stopped ones, will show here." : "Loading…"} />
         </Card>
       </div>
+
+      <Glossary />
     </div>
   );
 }
