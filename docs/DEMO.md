@@ -21,6 +21,10 @@ Do the setup in [SETUP.md](SETUP.md) steps 4 to 10.4 first, including all seven 
 - Open the **Treasury** console in one window. Its right-hand pane is the live log.
 - Run the worker too (`./dev.sh` starts it), so payouts get confirmed without you doing anything.
 
+## Fastest path: the starter plan
+
+On a fresh account, open **Treasury**, paste the email of one sandbox business account, and press **Start with a safe starter plan**. BundoPay verifies it with $0.01, sets small test limits and switches on a 10% tax rule. Then press **Simulate a $100 sale**, approve it as your sandbox buyer on PayPal, and $10.00 moves to the Tax Reserve within seconds.
+
 ## Beat 1: the policy, in plain words (tested)
 
 1. In **Treasury Copilot**, type:

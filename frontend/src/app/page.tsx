@@ -42,7 +42,7 @@ export default function InsightsPage() {
           <Empty icon="account_balance" title="Set up your treasury accounts">
             Add the account your business runs on and the reserves money is set aside into, and this page splits your
             balance by what it&rsquo;s for.
-            <div className="mt-5"><Button variant="primary" href="/treasury/setup">Add accounts</Button></div>
+            <div className="mt-5"><Button variant="primary" href="/treasury">Get started</Button></div>
           </Empty>
         </Card>
       ) : (
