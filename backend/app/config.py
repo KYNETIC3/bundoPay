@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     # Run the job worker inside the API process (for hosts with a single free web service, like Render).
     run_worker_in_process: bool = False
 
+    # Sandbox only: create sign-ups already confirmed, so Supabase's email cap can't block testing.
+    auto_confirm_signups: bool = False
+
     # Hosted demo. Empty demo_email turns the demo features off.
     demo_email: str = ""
     demo_password: str = ""  # read only by `python -m app.demo` when it creates the account

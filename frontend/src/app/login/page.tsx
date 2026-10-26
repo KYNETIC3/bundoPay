@@ -16,6 +16,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [instant, setInstant] = useState(false);
   const [demoEmail, setDemoEmail] = useState<string | null>(null);
   const [server, setServer] = useState<"checking" | "waking" | "up" | "down">("checking");
 
@@ -26,6 +27,7 @@ export default function LoginPage() {
       .then((r) => { setDemoEmail(r.enabled ? r.email : null); setServer("up"); })
       .catch(() => setServer("down"))
       .finally(() => clearTimeout(slow));
+    api<{ auto_confirm_signups: boolean }>("/auth/config").then((r) => setInstant(r.auto_confirm_signups)).catch(() => {});
     return () => clearTimeout(slow);
   }, []);
 
@@ -34,7 +36,18 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     const auth = supabase().auth;
-    const { error } = mode === "signin" ? await auth.signInWithPassword({ email, password }) : await auth.signUp({ email, password });
+    let error: { message: string } | null;
+    if (mode === "signup" && instant) {
+      // The server creates the account already confirmed, then we sign in: no confirmation email to be rate limited.
+      try {
+        await api("/auth/signup", { method: "POST", body: JSON.stringify({ email, password }) });
+        ({ error } = await auth.signInWithPassword({ email, password }));
+      } catch (e) {
+        error = e as Error;
+      }
+    } else {
+      ({ error } = mode === "signin" ? await auth.signInWithPassword({ email, password }) : await auth.signUp({ email, password }));
+    }
     setBusy(false);
     if (error) return setError(error.message);
     router.replace("/");
