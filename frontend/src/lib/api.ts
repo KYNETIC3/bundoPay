@@ -33,7 +33,15 @@ export async function api<T = unknown>(path: string, init: RequestInit = {}): Pr
       const body = await res.json();
       const detail = body.detail;
       if (typeof detail === "string") message = detail;
-      else if (detail) ({ code = code, message = message } = detail);
+      else if (Array.isArray(detail)) {
+        // FastAPI validation errors: [{ loc, msg }]. Say which field and what's wrong.
+        message = detail.map((d: { loc?: unknown[]; msg?: string }) => {
+          const field = String(d.loc?.[d.loc.length - 1] ?? "").replace(/_/g, " ");
+          const msg = (d.msg ?? "").replace(/^Value error, /, "");
+          return field && !msg.toLowerCase().includes(field) ? `${field}: ${msg}` : msg;
+        }).join(". ");
+        code = "validation";
+      } else if (detail) ({ code = code, message = message } = detail);
     } catch {
       /* non-JSON error body */
     }

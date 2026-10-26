@@ -272,7 +272,7 @@ class Position:
     role: str
     name: str
     balance: Decimal | None  # None when PayPal gave no figure; nothing is made up in its place
-    source: str  # paypal (read from PayPal) | confirmed (payouts PayPal confirmed) | unavailable
+    source: str  # paypal (read from PayPal) | declared (the owner's own cap, PayPal gave none) | confirmed | unavailable
     pending: Decimal = Decimal("0")  # sent through PayPal, not yet confirmed as received
 
 
@@ -296,14 +296,19 @@ async def positions(conn: AsyncConnection, merchant_id: UUID | str, *, gateway: 
         (merchant_id, list(SENDABLE)),
     )
     pending = {str(r["to_account_id"]): Decimal(r["out"]) for r in await inflight.fetchall()}
-    limits = await conn.execute("select currency from treasury_limits where merchant_id = %s", (merchant_id,))
+    limits = await conn.execute("select currency, movable_when_unknown from treasury_limits where merchant_id = %s", (merchant_id,))
     lim = await limits.fetchone()
     live = await paypal_balance(gateway or get_gateway(), lim["currency"] if lim else "USD")
     out = []
     for r in rows:
         if r["role"] == "operating":
-            out.append(Position(str(r["id"]), r["role"], r["name"], live, "paypal" if live is not None else "unavailable",
-                                sum(pending.values(), Decimal("0"))))
+            sent = sum(pending.values(), Decimal("0"))
+            declared = lim["movable_when_unknown"] if lim else None
+            if live is None and declared is not None:
+                # PayPal gave no balance: the owner's own number, less what BundoPay has since confirmed as sent.
+                out.append(Position(str(r["id"]), r["role"], r["name"], Decimal(declared) + Decimal(r["moved"]), "declared", sent))
+            else:
+                out.append(Position(str(r["id"]), r["role"], r["name"], live, "paypal" if live is not None else "unavailable", sent))
         else:
             out.append(Position(str(r["id"]), r["role"], r["name"], Decimal(r["moved"]), "confirmed", pending.get(str(r["id"]), Decimal("0"))))
     return out

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { ago, money, when } from "@/lib/format";
@@ -26,6 +27,7 @@ const ROLE_SHADE: Record<Role, string> = {
 
 const SOURCE: Record<Position["source"], string> = {
   paypal: "Balance read from PayPal",
+  declared: "PayPal didn't return a balance, so this is the amount you said BundoPay may use",
   confirmed: "Only payouts PayPal confirmed as received",
   unavailable: "PayPal didn't return a balance for this account",
 };
@@ -93,7 +95,7 @@ export function TreasuryHero({ positions: unordered, floor, currency, actions }:
               <p className="mt-1 pl-4 text-[19px] font-semibold tabular-nums tracking-[-0.015em]">{money(p.balance, currency)}</p>
               {isOp ? (
                 <p className={`mt-0.5 pl-4 text-xs ${below ? "font-semibold text-danger" : at ? "font-medium text-ink-2" : "text-muted"}`}>
-                  {p.balance === null ? "Not available" : below ? `Below its ${money(floor, currency)} floor` : at ? `At its ${money(floor, currency)} floor` : `Floor ${money(floor, currency)}`}
+                  {p.source === "declared" ? "Your cap, not PayPal's" : p.balance === null ? "Not available" : below ? `Below its ${money(floor, currency)} floor` : at ? `At its ${money(floor, currency)} floor` : `Floor ${money(floor, currency)}`}
                 </p>
               ) : (
                 <p className="mt-0.5 pl-4 text-xs text-muted">Confirmed by PayPal</p>
@@ -102,6 +104,15 @@ export function TreasuryHero({ positions: unordered, floor, currency, actions }:
           );
         })}
       </ul>
+      {positions.some((p) => p.role === "operating" && p.source === "unavailable") && (
+        <p className="mt-6 flex items-start gap-2 border-t border-line pt-5 text-sm leading-relaxed text-ink-2">
+          <Icon name="info" className="mt-px shrink-0 text-[18px] text-muted" />
+          <span>
+            PayPal&rsquo;s sandbox didn&rsquo;t share Operating&rsquo;s balance, so nothing can move yet. To test anyway, set how much
+            BundoPay may use under <Link href="/treasury/setup" className="font-semibold underline">Accounts &rarr; Safety limits</Link>.
+          </span>
+        </p>
+      )}
       <InFlight positions={positions} currency={currency} />
     </section>
   );
