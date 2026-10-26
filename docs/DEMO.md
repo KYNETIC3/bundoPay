@@ -8,16 +8,16 @@ Every number below comes from a tested run on 24 Oct 2026, against the sandbox a
 
 Do the setup in [SETUP.md](SETUP.md) steps 4 to 10.4 first, including all seven migrations.
 
-| Account | Opening balance | Notes |
+| Account | Email | Notes |
 |---|---|---|
-| Operating | $33,760.00 | Shown as **Simulated**, because the sandbox returns 403 for the balance endpoint |
-| Tax Reserve | $1,023.00 | |
-| Dispute Margin Buffer | $5,110.00 | |
-| Ad-Spend Wallet | $0.00 | |
+| Operating | none needed | Your connected PayPal. Its balance is PayPal's own figure. When the sandbox returns **Not available**, set "allow up to" under Safety limits (your own number, labelled as such) |
+| Tax Reserve | a real sandbox business email | Shows only payouts PayPal confirmed |
+| Dispute Margin Buffer | a real sandbox business email | Same |
+| Ad-Spend Wallet | a real sandbox business email | Same |
 
 - Use real sandbox business account emails for the three reserves ([SETUP.md step 5.4](SETUP.md#54-create-reserve-accounts-for-treasury)). Otherwise the payout in Beat 4 ends **UNCLAIMED** and the balances won't move.
 - Keep the default limits: $25,000 floor, $5,000 solo limit, and $50,000 per run / $150,000 per 7 days hard caps.
-- Verify all four accounts.
+- Click **Verify with $0.01** on each reserve. BundoPay sends one cent and only marks the account verified when PayPal delivers it. An email that is not a real sandbox account stays unverified, with a message telling you what to create.
 - Open the **Treasury** console in one window. Its right-hand pane is the live log.
 - Run the worker too (`./dev.sh` starts it), so payouts get confirmed without you doing anything.
 
@@ -84,8 +84,8 @@ Closing line: *"Your balance was always three kinds of money. BundoPay Treasury 
 
 A payout still in flight keeps Operating at the floor, so Beat 4 can't re-plan a second time. To reset:
 
-- Edit Operating's opening balance upward. Editing clears verification, so click **I confirm these details** again.
-- Or let the payout settle and add a new opening balance.
+- Raise the "allow up to" amount under Safety limits if PayPal still shows no Operating balance.
+- Or let the payout settle; Operating then reflects PayPal's figure again.
 
 Blocked runs keep their idempotency keys, so every **Run now** gets a fresh key and is evaluated on its own.
 
@@ -95,5 +95,5 @@ Blocked runs keep their idempotency keys, so every **Run now** gets a fresh key 
   - the safety engine, the simulator, approvals and the HMAC chain
   - sandbox Payouts calls (batch `BZYV7Y85MSKQA` was a real sandbox payout)
   - the capture re-fetch and webhook verification
-- **Labelled as simulated:** the Operating balance (the sandbox refuses the balance API), and opening balances you enter.
+- **Labelled as yours, not PayPal's:** the "allow up to" amount, used only while the sandbox refuses the balance API.
 - **Never claimed:** that this is PayPal's own product, a bank or escrow, or that it gives tax advice. The tax rate is yours to set.

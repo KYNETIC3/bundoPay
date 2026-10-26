@@ -344,9 +344,9 @@ You can change the refund limit in **Settings**.
 
 1. Click **Treasury** in the side menu, then the **Accounts** tab.
 2. Click **Add account** and add four accounts:
-   - **Operating:** enter the money you're starting with. It shows as **Simulated**, because PayPal's test mode doesn't share your real balance.
+   - **Operating:** your connected PayPal. No email is needed to start. If PayPal's test mode doesn't share its balance, you'll see **Not available**; set an "allow up to" amount under Safety limits to test anyway.
    - **Tax Reserve**, **Dispute Margin Buffer** and **Ad-Spend Wallet:** use the three emails from 5.4.
-3. Click **Confirm details** on each account. BundoPay never sends money to an account you haven't confirmed.
+3. Click **Verify with $0.01** on each reserve. BundoPay sends one cent to the email and only marks it verified when PayPal delivers it, so each email must belong to a real sandbox account (5.4). BundoPay never sends money to an account you haven't verified.
 4. Look at the **Safety limits** on the same page. The defaults are fine to start with:
    - **Always keep in Operating:** $25,000
    - **Move on its own up to:** $5,000. Anything bigger waits for your OK.
@@ -429,7 +429,7 @@ From the `backend` folder on your computer, with `backend/.env` pointing at the 
 DEMO_EMAIL=judge@bundopay.test DEMO_PASSWORD='the-password' DEMO_ACCOUNT_EMAILS='op@…,tax@…,buffer@…,ads@…' uv run python -m app.demo
 ```
 
-It creates the login (or updates its password), connects it to your sandbox business account, and sets up Treasury with the starting balances from [DEMO.md](DEMO.md). Running it again is safe.
+It creates the login (or updates its password), connects it to your sandbox business account, and sets up Treasury with four pre-verified accounts as described in [DEMO.md](DEMO.md). Running it again is safe.
 
 The demo resets itself every night at 03:00 UTC. Judges can also click **Settings** → **Reset demo**. A reset clears the demo account's treasury, chat and history. PayPal disputes stay, because they live in the PayPal sandbox.
 

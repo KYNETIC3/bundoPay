@@ -8,7 +8,7 @@ export type PolicyKind = "tax_reserve" | "dispute_buffer" | "ad_sweep" | "rebala
 
 /** Every figure is PayPal's: `balance` is null when PayPal didn't return one, and `pending` is money sent that
  * PayPal hasn't confirmed as received. */
-export type Position = { account_id: string; role: Role; name: string; balance: string | null; source: "paypal" | "confirmed" | "unavailable"; pending: string };
+export type Position = { account_id: string; role: Role; name: string; balance: string | null; source: "paypal" | "declared" | "confirmed" | "unavailable"; pending: string };
 export type Account = { id: string; role: Role; name: string; paypal_email: string; verified_at: string | null };
 export type Limits = {
   currency: string;
@@ -18,6 +18,8 @@ export type Limits = {
   hard_cap_per_week: string;
   hard_cap_per_month: string | null;
   liquidity_floor: string;
+  /** Used as Operating's balance only while PayPal returns none. The owner's own number. */
+  movable_when_unknown: string | null;
 };
 
 export type TaxSpec = { kind: "tax_reserve"; rate: string };
@@ -151,7 +153,7 @@ export const CHECK_LABELS: Record<string, string> = {
   "4_period_cap": "Above a period cap",
   "5_duplicate": "Duplicate",
   "6_liquidity_floor": "Would breach the liquidity floor",
-  "6_balance_unknown": "Balance unknown",
+  "6_balance_unknown": "PayPal shows no Operating balance. Set an allowed amount under Accounts \u2192 Safety limits",
   "7_needs_approval": "Above your auto-run limit",
   owner_declined: "You declined",
   nothing_to_do: "Targets already met",
@@ -188,7 +190,8 @@ export const treasury = {
   addAccount: (a: { role: Role; name: string; paypal_email: string }) => api<{ id: string }>("/treasury/accounts", json(a)),
   editAccount: (id: string, a: { name: string; paypal_email: string }) =>
     api(`/treasury/accounts/${id}`, { method: "PUT", body: JSON.stringify(a) }),
-  verifyAccount: (id: string) => api(`/treasury/accounts/${id}/verify`, { method: "POST" }),
+  verifyAccount: (id: string) =>
+    api<{ verified: boolean; status: string; message: string }>(`/treasury/accounts/${id}/verify`, { method: "POST" }),
   copilot: (text: string) => api<CopilotResult>("/treasury/copilot", json({ text })),
   acceptDrafts: (drafts: PolicyDoc[]) =>
     api<{ created: { policy_id: string; version: number }[] }>("/treasury/copilot/accept", json({ drafts })),

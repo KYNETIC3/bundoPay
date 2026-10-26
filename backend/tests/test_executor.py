@@ -23,6 +23,7 @@ class DB:
         self.movements = {}
         self.ledger = []
         self.events = []
+        self.movable = None
 
     def add(self, mid, to, amount, key, status="allowed", kind="sweep"):
         self.movements[mid] = {
@@ -90,8 +91,8 @@ class Conn:
             for a in db.accounts.values():
                 moved = sum((e[3] for e in db.ledger if e[1] == a["id"]), D("0"))
                 rows.append({"id": a["id"], "role": a["role"], "name": a["name"], "moved": moved})
-        elif s.startswith("select currency from treasury_limits"):
-            rows = [{"currency": "USD"}]
+        elif s.startswith("select currency, movable_when_unknown from treasury_limits"):
+            rows = [{"currency": "USD", "movable_when_unknown": db.movable}]
         elif s.startswith("select to_account_id"):
             out: dict = {}
             for m in db.movements.values():
@@ -318,3 +319,19 @@ async def test_payout_in_flight_is_pending_not_arrived(db, gateway, paypal):
     positions = {p.role: p for p in await ex.positions(Conn(db), M, gateway=gateway)}
     assert positions["operating"].balance is None and positions["operating"].pending == D("8760.00")
     assert positions["ad_spend"].balance == D("0") and positions["ad_spend"].pending == D("8760.00")  # credited only once PayPal says SUCCESS
+
+
+async def test_declared_cap_stands_in_only_when_paypal_gives_no_balance(db, gateway, paypal):
+    paypal.get("/v1/reporting/balances").mock(return_value=httpx.Response(403, json={"name": "NOT_AUTHORIZED"}))
+    db.movable = D("2000")
+    db.ledger.append((M, "op", "mv", D("-300")))  # 300 already confirmed as sent
+    op = {p.role: p for p in await ex.positions(Conn(db), M, gateway=gateway)}["operating"]
+    assert op.balance == D("1700.00") and op.source == "declared"
+
+
+async def test_declared_cap_is_ignored_when_paypal_returns_a_balance(db, gateway, paypal):
+    paypal.get("/v1/reporting/balances").mock(return_value=httpx.Response(200, json={
+        "balances": [{"currency": "USD", "available_balance": {"currency": "USD", "value": "41000.00"}}]}))
+    db.movable = D("2000")
+    op = {p.role: p for p in await ex.positions(Conn(db), M, gateway=gateway)}["operating"]
+    assert op.balance == D("41000.00") and op.source == "paypal"

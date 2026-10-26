@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import time
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
@@ -14,7 +15,10 @@ from app.audit import audit, verify_chain
 from app.auth import CurrentMerchant, current_merchant
 from app.deps import llm_rate_limit
 from app.db import connection
-from app.executor.service import positions
+from app.deps import get_gateway
+from app.events import notify_treasury_changed
+from app.executor.service import batch_key, positions
+from app.paypal_gateway import PayPalError
 from app.agent.orchestrator import default_llm
 from app.safety.engine import Movement, Trigger
 from app.safety.service import guard_plan, load_limits
@@ -52,6 +56,7 @@ class LimitsBody(BaseModel):
     hard_cap_per_week: Money
     hard_cap_per_month: Money | None = None
     liquidity_floor: Money
+    movable_when_unknown: Money | None = None
 
     @model_validator(mode="after")
     def solo_within_cap(self):
@@ -204,17 +209,65 @@ async def edit_account(account_id: UUID, body: AccountEdit, merchant: CurrentMer
 
 @router.post("/accounts/{account_id}/verify")
 async def verify_account(account_id: UUID, merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, Any]:
+    """Proves a destination is a real PayPal account by sending it $0.01 and reading PayPal's answer.
+    Verified only on SUCCESS. The operating row is the connected PayPal itself, so it has nothing to send to."""
     async with connection() as conn:
         cur = await conn.execute(
-            "update treasury_accounts set verified_at = now() where id = %s and merchant_id = %s returning paypal_email, details_hash",
+            "select role, name, paypal_email, details_hash, verified_at from treasury_accounts where id = %s and merchant_id = %s",
             (account_id, merchant.id),
         )
-        row = await cur.fetchone()
-        if not row:
+        acct = await cur.fetchone()
+        if not acct:
             raise TreasuryError("not_found", "Account not found", 404)
-        await audit(conn, "account.verified", merchant_id=merchant.id, actor="owner",
-                    data={"account_id": str(account_id), "details_hash": row["details_hash"]})
-    return {"id": str(account_id), "verified": True}
+        if acct["verified_at"] is not None:
+            return {"id": str(account_id), "verified": True, "status": "SUCCESS", "message": "Already verified"}
+        currency = (await load_limits(conn, merchant.id))["currency"]
+    status, message = "SUCCESS", "This is your connected PayPal account"
+    if acct["role"] != "operating":
+        status, message = await _test_payout(account_id, acct, currency)
+    ok = status == "SUCCESS"
+    async with connection() as conn:
+        if ok:
+            # Only if the details are still the ones that were tested.
+            cur = await conn.execute(
+                "update treasury_accounts set verified_at = now() where id = %s and merchant_id = %s and details_hash = %s returning id",
+                (account_id, merchant.id, acct["details_hash"]),
+            )
+            ok = await cur.fetchone() is not None
+            if not ok:
+                message = "The details changed while testing. Verify again."
+        await audit(conn, "account.verified" if ok else "account.verify_failed", merchant_id=merchant.id, actor="owner",
+                    data={"account_id": str(account_id), "details_hash": acct["details_hash"], "paypal_status": status})
+        await notify_treasury_changed(conn, merchant.id)
+    return {"id": str(account_id), "verified": ok, "status": status, "message": message}
+
+
+VERIFY_AMOUNT = "0.01"
+VERIFY_HELP = {
+    "UNCLAIMED": "PayPal couldn't find a sandbox account for that email, so the cent is waiting unclaimed. "
+                 "Create a Business sandbox account with this exact email at developer.paypal.com > Testing Tools > Sandbox Accounts, then verify again.",
+    "PENDING": "PayPal is still processing the test cent. Wait a moment, then press Verify again.",
+    "ONHOLD": "PayPal put the test cent on hold. Check the account in the sandbox dashboard, then verify again.",
+}
+
+
+async def _test_payout(account_id: UUID, acct: dict[str, Any], currency: str) -> tuple[str, str]:
+    gw = get_gateway()
+    # One key per account, details and minute: a double-click repeats one request, a later retry makes a new one.
+    key = batch_key([f"verify:{account_id}:{acct['details_hash']}:{int(time.time() // 60)}"])
+    item = {"recipient_type": "EMAIL", "receiver": acct["paypal_email"], "amount": {"value": VERIFY_AMOUNT, "currency": currency},
+            "sender_item_id": f"verify-{account_id}", "note": "BundoPay account check"}
+    try:
+        resp = await gw.create_payout_batch(sender_batch_id=key, items=[item], email_subject="BundoPay account check")
+        batch = (resp.get("batch_header") or {}).get("payout_batch_id")
+        body = await gw.get_payout_batch(batch) if batch else {}
+    except PayPalError as exc:
+        return "ERROR", f"PayPal said no: {exc.message or exc.name}. Nothing was sent."
+    items = body.get("items") or []
+    status = (items[0].get("transaction_status") if items else None) or (body.get("batch_header") or {}).get("batch_status") or "PENDING"
+    if status == "SUCCESS":
+        return status, f"Verified. PayPal delivered ${VERIFY_AMOUNT} to {acct['paypal_email']}."
+    return status, VERIFY_HELP.get(status, f"PayPal returned {status}, so the account can't be verified yet.")
 
 
 @router.put("/limits")
@@ -223,9 +276,9 @@ async def put_limits(body: LimitsBody, merchant: CurrentMerchant = Depends(curre
         await load_limits(conn, merchant.id)
         await conn.execute(
             "update treasury_limits set solo_limit = %s, hard_cap_per_run = %s, hard_cap_per_day = %s, hard_cap_per_week = %s, "
-            "hard_cap_per_month = %s, liquidity_floor = %s, updated_at = now() where merchant_id = %s",
+            "hard_cap_per_month = %s, liquidity_floor = %s, movable_when_unknown = %s, updated_at = now() where merchant_id = %s",
             (body.solo_limit, body.hard_cap_per_run, body.hard_cap_per_day, body.hard_cap_per_week, body.hard_cap_per_month,
-             body.liquidity_floor, merchant.id),
+             body.liquidity_floor, body.movable_when_unknown, merchant.id),
         )
         await audit(conn, "limits.updated", merchant_id=merchant.id, actor="owner", data=body.model_dump(mode="json"))
     return body.model_dump(mode="json")

@@ -23,6 +23,7 @@ export default function TreasuryPage() {
   const currency = data.limits.currency;
   const pending = data.plans.filter((p) => p.status === "needs_approval");
   const needsSetup = !data.accounts.some((a) => a.role === "operating") || data.accounts.every((a) => !a.verified_at);
+  const noReserve = !data.accounts.some((a) => a.role !== "operating" && a.verified_at);
   const running = data.policies.filter((p) => p.status === "active");
   const next = running.map((p) => p.next_run_at).filter((t): t is string => !!t).sort()[0];
   const recent = condense(feed.data?.entries ?? [], currency).slice(0, 5);
@@ -41,6 +42,16 @@ export default function TreasuryPage() {
 
   return (
     <div className="space-y-10">
+      {noReserve && (
+        <Card>
+          <p className="flex flex-wrap items-center gap-3 text-sm text-ink-2">
+            <Icon name="info" className="text-[18px] text-muted" />
+            <span>There&rsquo;s nowhere to move money into yet. Add and verify a reserve account (Tax, Dispute buffer or Ad spend).</span>
+            <Button variant="primary" href="/treasury/setup" className="min-h-9 px-3.5 text-[13px]">Add a reserve</Button>
+          </p>
+        </Card>
+      )}
+
       <TreasuryHero
         positions={data.positions}
         floor={data.limits.liquidity_floor}
