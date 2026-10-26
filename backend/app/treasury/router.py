@@ -38,13 +38,11 @@ class AccountBody(BaseModel):
     role: Literal["operating", "tax_reserve", "dispute_buffer", "ad_spend", "other"]
     name: Annotated[str, Field(min_length=1, max_length=80)]
     paypal_email: Email
-    opening_balance: Money = Decimal("0.00")
 
 
 class AccountEdit(BaseModel):
     name: Annotated[str, Field(min_length=1, max_length=80)]
     paypal_email: Email
-    opening_balance: Money
 
 
 class LimitsBody(BaseModel):
@@ -92,7 +90,7 @@ async def overview(merchant: CurrentMerchant = Depends(current_merchant)) -> dic
         limits = await load_limits(conn, merchant.id)
         pos = await positions(conn, merchant.id)
         accounts = await (await conn.execute(
-            "select id, role, name, paypal_email, opening_balance, verified_at from treasury_accounts where merchant_id = %s order by role, name",
+            "select id, role, name, paypal_email, verified_at from treasury_accounts where merchant_id = %s order by role, name",
             (merchant.id,),
         )).fetchall()
         policies = await (await conn.execute(
@@ -173,15 +171,15 @@ async def feed(after: int = 0, merchant: CurrentMerchant = Depends(current_merch
 async def add_account(body: AccountBody, merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, Any]:
     async with connection() as conn:
         cur = await conn.execute(
-            "insert into treasury_accounts (merchant_id, role, name, paypal_email, opening_balance, details_hash) "
-            "values (%s, %s, %s, %s, %s, %s) on conflict do nothing returning id",
-            (merchant.id, body.role, body.name, str(body.paypal_email), body.opening_balance, _details_hash(body.name, body.paypal_email)),
+            "insert into treasury_accounts (merchant_id, role, name, paypal_email, details_hash) "
+            "values (%s, %s, %s, %s, %s) on conflict do nothing returning id",
+            (merchant.id, body.role, body.name, str(body.paypal_email), _details_hash(body.name, body.paypal_email)),
         )
         row = await cur.fetchone()
         if not row:
             raise TreasuryError("exists", "An account with that name or role already exists", 409)
         await audit(conn, "account.added", merchant_id=merchant.id, actor="owner",
-                    data={"account_id": str(row["id"]), "role": body.role, "name": body.name, "opening_balance": f"{body.opening_balance:.2f}"})
+                    data={"account_id": str(row["id"]), "role": body.role, "name": body.name})
     return {"id": str(row["id"]), "verified": False}
 
 
@@ -191,10 +189,10 @@ async def edit_account(account_id: UUID, body: AccountEdit, merchant: CurrentMer
     h = _details_hash(body.name, body.paypal_email)
     async with connection() as conn:
         cur = await conn.execute(
-            "update treasury_accounts set name = %s, paypal_email = %s, opening_balance = %s, "
+            "update treasury_accounts set name = %s, paypal_email = %s, "
             "verified_at = case when details_hash = %s then verified_at end, details_hash = %s "
             "where id = %s and merchant_id = %s returning verified_at",
-            (body.name, str(body.paypal_email), body.opening_balance, h, h, account_id, merchant.id),
+            (body.name, str(body.paypal_email), h, h, account_id, merchant.id),
         )
         row = await cur.fetchone()
         if not row:

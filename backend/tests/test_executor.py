@@ -89,13 +89,15 @@ class Conn:
         elif s.startswith("select a.id, a.role"):
             for a in db.accounts.values():
                 moved = sum((e[3] for e in db.ledger if e[1] == a["id"]), D("0"))
-                rows.append({"id": a["id"], "role": a["role"], "name": a["name"], "opening_balance": a["opening_balance"], "moved": moved})
+                rows.append({"id": a["id"], "role": a["role"], "name": a["name"], "moved": moved})
         elif s.startswith("select currency from treasury_limits"):
             rows = [{"currency": "USD"}]
-        elif s.startswith("select coalesce(sum(amount), 0) as out"):
-            out = sum((m["amount"] for m in db.movements.values()
-                       if m["kind"] in params[1] and m["status"] in ("allowed", "executing", "unconfirmed")), D("0"))
-            rows = [{"out": out}]
+        elif s.startswith("select to_account_id"):
+            out: dict = {}
+            for m in db.movements.values():
+                if m["kind"] in params[1] and m["status"] in ("allowed", "executing", "unconfirmed"):
+                    out[m["to_account_id"]] = out.get(m["to_account_id"], D("0")) + D(m["amount"])
+            rows = [{"to_account_id": k, "out": v} for k, v in out.items()]
 
         class Cur:
             async def fetchone(self):
@@ -162,9 +164,9 @@ async def test_demo_rebalance_sends_one_batch_and_settles_ledger(db, gateway, pa
     assert {m["status"] for m in db.movements.values()} == {"succeeded"}
     paypal.get("/v1/reporting/balances").mock(return_value=httpx.Response(200, json={"balances": []}))
     positions = {p.role: p for p in await ex.positions(Conn(db), M, gateway=gateway)}
-    assert positions["operating"].balance == D("25000.00") and positions["operating"].source == "simulated"
-    assert positions["dispute_buffer"].balance == D("9310.00")
-    assert positions["ad_spend"].balance == D("4560.00")
+    assert positions["operating"].balance is None and positions["operating"].source == "unavailable"
+    assert positions["dispute_buffer"].balance == D("4200.00")  # only what PayPal confirmed, no opening balance
+    assert positions["ad_spend"].balance == D("4560.00") and positions["ad_spend"].source == "confirmed"
     assert "execution.confirmed" in db.events
 
 
@@ -248,19 +250,20 @@ async def test_failed_item_is_settled_as_failed(db, gateway, paypal):
     assert {e[2] for e in db.ledger} == {"mv-1"}
 
 
-async def test_live_paypal_balance_replaces_the_simulated_one(db, gateway, paypal):
+async def test_operating_is_paypals_own_balance(db, gateway, paypal):
     paypal.get("/v1/reporting/balances").mock(return_value=httpx.Response(200, json={
         "balances": [{"currency": "USD", "available_balance": {"currency_code": "USD", "value": "41000.00"}}]
     }))
     positions = {p.role: p for p in await ex.positions(Conn(db), M, gateway=gateway)}
     assert positions["operating"].balance == D("41000.00") and positions["operating"].source == "paypal"
-    assert positions["ad_spend"].source == "ledger"
+    assert positions["ad_spend"].source == "confirmed"
 
 
-async def test_balance_error_falls_back_to_simulated(db, gateway, paypal):
+async def test_balance_error_leaves_operating_unknown(db, gateway, paypal):
+    """No typed-in opening balance stands in for PayPal's figure."""
     paypal.get("/v1/reporting/balances").mock(return_value=httpx.Response(403, json={"name": "NOT_AUTHORIZED"}))
     positions = {p.role: p for p in await ex.positions(Conn(db), M, gateway=gateway)}
-    assert positions["operating"].source == "simulated" and positions["operating"].balance == D("33760")
+    assert positions["operating"].source == "unavailable" and positions["operating"].balance is None
 
 
 async def test_payout_webhook_only_queues_a_refetch(monkeypatch):
@@ -304,8 +307,8 @@ async def test_unavailable_balance_is_not_asked_for_on_every_load(db, gateway, p
     assert route.call_count == 1
 
 
-async def test_payout_in_flight_comes_off_simulated_operating(db, gateway, paypal):
-    """An UNCLAIMED or pending payout has left Operating for planning purposes, before any ledger entry."""
+async def test_payout_in_flight_is_pending_not_arrived(db, gateway, paypal):
+    """An UNCLAIMED or pending payout shows as pending on both ends, and never as money in the reserve."""
     db.add("mv-1", "ad", "8760.00", "k-1")
     paypal.post("/v1/payments/payouts").mock(return_value=batch_response())
     paypal.get("/v1/payments/payouts/7HJ2").mock(return_value=batch_detail([("mv-1", "UNCLAIMED")]))
@@ -313,5 +316,5 @@ async def test_payout_in_flight_comes_off_simulated_operating(db, gateway, paypa
     result = await ex.execute(M, ["mv-1"], gateway=gateway)
     assert result.status == "executing" and db.ledger == []
     positions = {p.role: p for p in await ex.positions(Conn(db), M, gateway=gateway)}
-    assert positions["operating"].balance == D("25000.00")
-    assert positions["ad_spend"].balance == D("0")  # credited only once PayPal says SUCCESS
+    assert positions["operating"].balance is None and positions["operating"].pending == D("8760.00")
+    assert positions["ad_spend"].balance == D("0") and positions["ad_spend"].pending == D("8760.00")  # credited only once PayPal says SUCCESS

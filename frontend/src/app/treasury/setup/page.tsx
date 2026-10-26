@@ -33,7 +33,7 @@ export default function SetupPage() {
 
 function AccountRow({ a, currency, onChanged }: { a: Account; currency: string; onChanged: () => void }) {
   const [edit, setEdit] = useState(false);
-  const [form, setForm] = useState({ name: a.name, paypal_email: a.paypal_email, opening_balance: a.opening_balance });
+  const [form, setForm] = useState({ name: a.name, paypal_email: a.paypal_email });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,11 +55,10 @@ function AccountRow({ a, currency, onChanged }: { a: Account; currency: string; 
   return (
     <div className="py-4 first:pt-0 last:pb-0">
       {edit ? (
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <input className={input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} aria-label="Name" />
           <input className={input} value={form.paypal_email} onChange={(e) => setForm({ ...form, paypal_email: e.target.value })} aria-label="PayPal email" />
-          <input className={input} inputMode="decimal" value={form.opening_balance} onChange={(e) => setForm({ ...form, opening_balance: e.target.value })} aria-label="Opening balance" />
-          <div className="flex gap-2 sm:col-span-3">
+          <div className="flex gap-2 sm:col-span-2">
             <Button variant="primary" disabled={busy} onClick={() => run(() => treasury.editAccount(a.id, form))}>Save</Button>
             <Button variant="ghost" onClick={() => setEdit(false)}>Cancel</Button>
           </div>
@@ -91,7 +90,7 @@ function AccountRow({ a, currency, onChanged }: { a: Account; currency: string; 
 }
 
 function AddAccount({ roles, onAdded }: { roles: Role[]; onAdded: () => void }) {
-  const [form, setForm] = useState({ role: roles[0], name: ROLE_LABELS[roles[0]], paypal_email: "", opening_balance: "0.00" });
+  const [form, setForm] = useState({ role: roles[0], name: ROLE_LABELS[roles[0]], paypal_email: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => setForm((f) => (roles.includes(f.role) ? f : { ...f, role: roles[0], name: ROLE_LABELS[roles[0]] })), [roles]);
@@ -102,7 +101,7 @@ function AddAccount({ roles, onAdded }: { roles: Role[]; onAdded: () => void }) 
     setError(null);
     try {
       await treasury.addAccount(form);
-      setForm({ ...form, paypal_email: "", opening_balance: "0.00" });
+      setForm({ ...form, paypal_email: "" });
       changed();
       onAdded();
     } catch (err) {
@@ -119,10 +118,8 @@ function AddAccount({ roles, onAdded }: { roles: Role[]; onAdded: () => void }) 
         {roles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
       </select>
       <input className={input} placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} aria-label="Name" />
-      <input className={input} placeholder="Sandbox PayPal email" type="email" required value={form.paypal_email}
+      <input className={`${input} sm:col-span-2`} placeholder="Sandbox PayPal email" type="email" required value={form.paypal_email}
         onChange={(e) => setForm({ ...form, paypal_email: e.target.value })} aria-label="PayPal email" />
-      <input className={input} placeholder="Opening balance" inputMode="decimal" value={form.opening_balance}
-        onChange={(e) => setForm({ ...form, opening_balance: e.target.value })} aria-label="Opening balance" />
       <div className="sm:col-span-2">
         <Button variant="primary" disabled={busy}><Icon name="add" className="text-[18px]" /> Add account</Button>
         {error && <p className="mt-2 text-xs text-danger">{error}</p>}

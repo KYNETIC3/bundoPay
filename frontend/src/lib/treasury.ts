@@ -6,8 +6,10 @@ import { money } from "./format";
 export type Role = "operating" | "tax_reserve" | "dispute_buffer" | "ad_spend" | "other";
 export type PolicyKind = "tax_reserve" | "dispute_buffer" | "ad_sweep" | "rebalance";
 
-export type Position = { account_id: string; role: Role; name: string; balance: string; source: "paypal" | "simulated" | "ledger" };
-export type Account = { id: string; role: Role; name: string; paypal_email: string; opening_balance: string; verified_at: string | null };
+/** Every figure is PayPal's: `balance` is null when PayPal didn't return one, and `pending` is money sent that
+ * PayPal hasn't confirmed as received. */
+export type Position = { account_id: string; role: Role; name: string; balance: string | null; source: "paypal" | "confirmed" | "unavailable"; pending: string };
+export type Account = { id: string; role: Role; name: string; paypal_email: string; verified_at: string | null };
 export type Limits = {
   currency: string;
   solo_limit: string;
@@ -183,8 +185,8 @@ export const treasury = {
     api<Record<string, unknown>>(`/treasury/policies/${id}/${action}`, { method: "POST" }),
   approvePlan: (id: string, plan_hash: string) => api<Record<string, unknown>>(`/treasury/plans/${id}/approve`, json({ plan_hash })),
   rejectPlan: (id: string) => api(`/treasury/plans/${id}/reject`, { method: "POST" }),
-  addAccount: (a: { role: Role; name: string; paypal_email: string; opening_balance: string }) => api<{ id: string }>("/treasury/accounts", json(a)),
-  editAccount: (id: string, a: { name: string; paypal_email: string; opening_balance: string }) =>
+  addAccount: (a: { role: Role; name: string; paypal_email: string }) => api<{ id: string }>("/treasury/accounts", json(a)),
+  editAccount: (id: string, a: { name: string; paypal_email: string }) =>
     api(`/treasury/accounts/${id}`, { method: "PUT", body: JSON.stringify(a) }),
   verifyAccount: (id: string) => api(`/treasury/accounts/${id}/verify`, { method: "POST" }),
   copilot: (text: string) => api<CopilotResult>("/treasury/copilot", json({ text })),
