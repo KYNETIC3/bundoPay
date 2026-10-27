@@ -6,7 +6,10 @@ turn to Gemini's function-calling format and streams the answer back, so the Gem
 the server. It never executes a tool, and it refuses tool names that belong to Bundo's own dispute
 and money tools, so a widget-building turn can't be steered into them.
 
-Request (`POST /agent/studio/turn`, JSON; mirrors `AgLlmRequest`):
+Request (`POST /agent/studio/turn`, JSON; mirrors `AgLlmRequest`). Send the same `X-Bundo-Chart-Id: <uuid>`
+header on every turn of one chart: the chart then counts once against the per-user Gemini limit, with at
+most 40 turns (then 429). Without the header every turn counts. Turns run on the lite model
+(`gemini_studio_model`, default `gemini_fallback_model`) with minimal thinking.
 
     {
       "instructions": "...",                       # system prompt for the turn
@@ -32,7 +35,8 @@ Response: `text/event-stream`, one JSON object per `data:` line:
      "finish_reason": "stop" | "max_output_tokens" | "content_filter" | "other", "model": "..."}
     {"type": "error", "message": "..."}
 
-Every stream ends with exactly one `done` or `error`. `id` is the AG `callId`; `usage` uses
+Every stream ends with exactly one `done` or `error`. Error messages are plain words for the merchant;
+when Gemini is rate-limiting, the turn waits with backoff first and then says Bundo is busy. `id` is the AG `callId`; `usage` uses
 `AgAiUsage` field names. Validation problems (unknown callId, a Bundo tool name, too many steps)
 are rejected with HTTP 400 before the stream starts.
 """
@@ -44,6 +48,7 @@ import base64
 import binascii
 import json
 import logging
+import time
 import uuid
 from collections.abc import AsyncIterator
 from typing import Any, Literal
@@ -51,7 +56,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .chat import TOOLS as CHAT_TOOLS
-from .llm import GeminiLLM, ModelUnavailableError
+from app.config import get_settings
+
+from .llm import GeminiLLM, ModelBusyError, ModelUnavailableError
 from .tools import READ_ONLY_TOOLS, WRITE_TOOLS
 
 log = logging.getLogger(__name__)
@@ -62,6 +69,9 @@ MAX_TOOLS = 48
 MAX_TOOL_ROUNDS = 40  # function calls already in the conversation; a widget build shouldn't need more
 MAX_OUTPUT_TOKENS = 8192
 TURN_TIMEOUT_SECONDS = 120
+ANSWER_SECONDS = 30  # of the turn timeout, kept for the answer after any waiting on Gemini's rate limit
+BUSY_MESSAGE = "Bundo is busy building charts right now. Try again in about a minute."
+UNAVAILABLE_MESSAGE = "Bundo can't reach its chart model right now. Try again in about a minute."
 # Gemini's documented placeholder for a function call whose real signature the client didn't keep.
 SKIP_SIGNATURE = b"skip_thought_signature_validator"
 LOCAL_ID = "bundo_call_"  # ids minted here when Gemini returns none; never sent back to Gemini
@@ -71,6 +81,20 @@ BUNDO_TOOLS = frozenset({t["name"] for t in CHAT_TOOLS} | set(READ_ONLY_TOOLS) |
 
 FINISH_REASONS = {"STOP": "stop", "MAX_TOKENS": "max_output_tokens", "SAFETY": "content_filter",
                   "PROHIBITED_CONTENT": "content_filter", "BLOCKLIST": "content_filter", "SPII": "content_filter"}
+
+
+_thinking_rejected: set[str] = set()  # GeminiLLM names that refused our thinking config
+
+
+def studio_llm() -> GeminiLLM | None:
+    """Chart turns are many and short, so they run on the fast lite model, with no slower fallback."""
+    s = get_settings()
+    model = s.gemini_studio_model or s.gemini_fallback_model or s.gemini_model
+    return GeminiLLM(s.gemini_api_key, model) if s.gemini_api_key else None
+
+
+def thinking_level(llm: GeminiLLM) -> str | None:
+    return None if llm.name in _thinking_rejected else (get_settings().gemini_studio_thinking_level or None)
 
 
 class StudioTool(BaseModel):
@@ -182,10 +206,11 @@ def build_contents(body: StudioTurnBody) -> tuple[str, list[Any]]:
     return "\n\n".join(system), contents
 
 
-def build_config(body: StudioTurnBody, system: str) -> Any:
+def build_config(body: StudioTurnBody, system: str, thinking: str | None = None) -> Any:
     from google.genai import types
 
     config: dict[str, Any] = {
+        "thinking_config": types.ThinkingConfig(thinking_level=thinking) if thinking else None,
         "system_instruction": system or None,
         "max_output_tokens": MAX_OUTPUT_TOKENS,
         "temperature": 0.2,
@@ -230,12 +255,31 @@ def sse(event: dict[str, Any]) -> str:
     return f"data: {json.dumps(event, separators=(',', ':'))}\n\n"
 
 
+async def _chunks(llm: GeminiLLM, contents: list[Any], config: Any, patient_until: float) -> AsyncIterator[tuple[str, Any]]:
+    """llm.stream, retried once without a thinking config if the model rejects the one we sent."""
+    from google.genai import errors
+
+    try:
+        async for item in llm.stream(contents, config, patient_until):
+            yield item
+    except errors.APIError as exc:
+        # Only reached before the first chunk: a 400 here means the request itself was refused.
+        if exc.code != 400 or config.thinking_config is None or "thinking" not in str(exc).lower():
+            raise
+        log.info("%s rejected thinking config; sending none from now on", llm.name)
+        _thinking_rejected.add(llm.name)
+        async for item in llm.stream(contents, config.model_copy(update={"thinking_config": None}), patient_until):
+            yield item
+
+
 async def stream_turn(llm: GeminiLLM, contents: list[Any], config: Any) -> AsyncIterator[str]:
     """Run one Gemini turn and yield SSE lines in the documented event shape."""
     usage_meta, finish, model = None, None, ""
+    # Leave room for the answer itself after waiting out Gemini's rate limit.
+    patient_until = time.monotonic() + TURN_TIMEOUT_SECONDS - ANSWER_SECONDS
     try:
         async with asyncio.timeout(TURN_TIMEOUT_SECONDS):
-            async for model, chunk in llm.stream(contents, config):
+            async for model, chunk in _chunks(llm, contents, config, patient_until):
                 usage_meta = chunk.usage_metadata or usage_meta
                 for cand in (chunk.candidates or [])[:1]:
                     if cand.finish_reason:
@@ -253,16 +297,18 @@ async def stream_turn(llm: GeminiLLM, contents: list[Any], config: Any) -> Async
                             })
                         elif part.text and not part.thought:
                             yield sse({"type": "text_delta", "text": part.text})
-    except ModelUnavailableError as exc:
-        yield sse({"type": "error", "message": str(exc)})
+    except ModelBusyError:
+        yield sse({"type": "error", "message": BUSY_MESSAGE})
+        return
+    except ModelUnavailableError:
+        yield sse({"type": "error", "message": UNAVAILABLE_MESSAGE})
         return
     except TimeoutError:
-        yield sse({"type": "error", "message": "Gemini took too long to answer. Please try again."})
+        yield sse({"type": "error", "message": "Bundo took too long on that chart step. Please try again."})
         return
     except Exception as exc:  # the stream has started, so errors must travel as events
         log.warning("studio turn failed: %s", exc)
-        code = getattr(exc, "code", None)
-        yield sse({"type": "error", "message": f"Gemini couldn't finish this turn{f' ({code})' if code else ''}."})
+        yield sse({"type": "error", "message": "Bundo couldn't finish that chart step. Please try again."})
         return
     yield sse({"type": "done", "usage": _usage(usage_meta),
                "finish_reason": FINISH_REASONS.get(finish or "STOP", "other"), "model": model})

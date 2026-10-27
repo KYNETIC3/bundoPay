@@ -8,6 +8,7 @@ from google.genai import errors, types
 
 from app import deps
 from app.agent import router as agent_router
+from app.agent import studio
 from app.agent.llm import GeminiLLM
 from app.auth import CurrentMerchant, current_merchant
 from app.config import Settings
@@ -44,11 +45,13 @@ def _chunk(*parts, finish=None, usage=None):
 class FakeModels:
     """Stands in for client.aio.models; records each streamed request."""
 
-    def __init__(self, chunks=(), error=None):
-        self.chunks, self.error, self.calls = list(chunks), error, []
+    def __init__(self, chunks=(), error=None, fail=()):
+        self.chunks, self.error, self.fail, self.calls = list(chunks), error, list(fail), []
 
     async def generate_content_stream(self, model, contents, config):
         self.calls.append({"model": model, "contents": contents, "config": config})
+        if self.fail:
+            raise self.fail.pop(0)
         if self.error:
             raise self.error
 
@@ -60,10 +63,32 @@ class FakeModels:
 
 
 def _gemini(monkeypatch, models):
-    llm = GeminiLLM("test-key", "gemini-test", "gemini-test-lite")
+    llm = GeminiLLM("test-key", "gemini-test-lite")
     llm._client = type("C", (), {"aio": type("A", (), {"models": models})()})()
-    monkeypatch.setattr(agent_router, "default_llm", lambda: llm)
+    monkeypatch.setattr(agent_router, "studio_llm", lambda: llm)
     return models
+
+
+def _settings(monkeypatch, **over):
+    s = Settings(_env_file=None, **{"llm_requests_per_10_minutes": 20, **over})
+    monkeypatch.setattr(deps, "get_settings", lambda: s)
+    monkeypatch.setattr(studio, "get_settings", lambda: s)
+    return s
+
+
+def _no_sleep(monkeypatch):
+    slept = []
+
+    async def fake_sleep(seconds):
+        slept.append(seconds)
+
+    monkeypatch.setattr("app.agent.llm.asyncio.sleep", fake_sleep)
+    return slept
+
+
+def _busy(retry_delay=None):
+    details = [{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": retry_delay}] if retry_delay else []
+    return errors.APIError(429, {"error": {"code": 429, "message": "Resource exhausted", "details": details}})
 
 
 def _events(resp):
@@ -72,12 +97,14 @@ def _events(resp):
 
 @pytest.fixture
 def client(monkeypatch):
-    deps._llm_calls.clear()
-    monkeypatch.setattr(deps, "get_settings", lambda: Settings(_env_file=None, llm_requests_per_10_minutes=20))
+    for store in (deps._llm_calls, deps._chart_turns, studio._thinking_rejected):
+        store.clear()
+    _settings(monkeypatch)
     app.dependency_overrides[current_merchant] = lambda: ME
     yield TestClient(app)  # no lifespan, no database
     app.dependency_overrides.clear()
-    deps._llm_calls.clear()
+    for store in (deps._llm_calls, deps._chart_turns, studio._thinking_rejected):
+        store.clear()
 
 
 def test_sign_in_required():
@@ -85,8 +112,8 @@ def test_sign_in_required():
     assert resp.status_code == 401
 
 
-def test_rate_limit_applies(client, monkeypatch):
-    monkeypatch.setattr(deps, "get_settings", lambda: Settings(_env_file=None, llm_requests_per_10_minutes=2))
+def test_rate_limit_applies_per_turn_without_a_chart_id(client, monkeypatch):
+    _settings(monkeypatch, llm_requests_per_10_minutes=2)
     models = _gemini(monkeypatch, FakeModels([_chunk(types.Part(text="ok"), finish="STOP")]))
     assert [client.post("/agent/studio/turn", json=_turn()).status_code for _ in range(3)] == [200, 200, 429]
     assert len(models.calls) == 2
@@ -106,7 +133,7 @@ def test_text_streams_and_usage_is_reported(client, monkeypatch):
         {"type": "text_delta", "text": "Here is "},
         {"type": "text_delta", "text": "your chart."},
         {"type": "done", "usage": {"inputTokens": 120, "outputTokens": 40, "totalTokens": 160, "reasoningTokens": 10},
-         "finish_reason": "stop", "model": "gemini-test"},
+         "finish_reason": "stop", "model": "gemini-test-lite"},
     ]
 
 
@@ -155,18 +182,83 @@ def test_gemini_error_becomes_error_event(client, monkeypatch):
     _gemini(monkeypatch, FakeModels(error=errors.APIError(400, {"error": {"message": "bad schema"}})))
     resp = client.post("/agent/studio/turn", json=_turn())
     assert resp.status_code == 200
-    assert _events(resp) == [{"type": "error", "message": "Gemini couldn't finish this turn (400)."}]
+    assert _events(resp) == [{"type": "error", "message": "Bundo couldn't finish that chart step. Please try again."}]
 
 
 def test_gemini_overloaded_becomes_error_event(client, monkeypatch):
-    async def no_sleep(_):
-        return None
-
-    monkeypatch.setattr("app.agent.llm.asyncio.sleep", no_sleep)
+    _no_sleep(monkeypatch)
     models = _gemini(monkeypatch, FakeModels(error=errors.APIError(503, {"error": {"message": "overloaded"}})))
     events = _events(client.post("/agent/studio/turn", json=_turn()))
-    assert events[0]["type"] == "error" and "unavailable" in events[0]["message"]
-    assert {c["model"] for c in models.calls} == {"gemini-test", "gemini-test-lite"}
+    assert events == [{"type": "error", "message": studio.UNAVAILABLE_MESSAGE}]
+    assert len(models.calls) == 4
+
+
+def test_gemini_429_backs_off_honouring_the_hint_then_answers(client, monkeypatch):
+    slept = _no_sleep(monkeypatch)
+    models = _gemini(monkeypatch, FakeModels([_chunk(types.Part(text="ok"), finish="STOP")],
+                                             fail=[_busy("7s"), _busy()]))
+    events = _events(client.post("/agent/studio/turn", json=_turn()))
+    assert [e["type"] for e in events] == ["text_delta", "done"]
+    assert len(models.calls) == 3 and len(slept) == 2
+    assert 7 <= slept[0] <= 8  # Gemini's retryDelay, plus jitter
+    assert 0 <= slept[1] <= 4  # jittered exponential backoff
+
+
+def test_gemini_429_that_persists_ends_in_plain_words(client, monkeypatch):
+    slept = _no_sleep(monkeypatch)
+    _gemini(monkeypatch, FakeModels(error=_busy("1s")))
+    events = _events(client.post("/agent/studio/turn", json=_turn()))
+    assert events == [{"type": "error", "message": "Bundo is busy building charts right now. Try again in about a minute."}]
+    assert len(slept) == 6
+
+
+def test_gemini_429_backoff_stays_inside_the_turn_timeout(client, monkeypatch):
+    slept = _no_sleep(monkeypatch)
+    _gemini(monkeypatch, FakeModels(error=_busy("600s")))
+    events = _events(client.post("/agent/studio/turn", json=_turn()))
+    assert events[0]["message"] == studio.BUSY_MESSAGE and slept == []
+
+
+def test_one_chart_counts_as_one_request(client, monkeypatch):
+    _settings(monkeypatch, llm_requests_per_10_minutes=2)
+    _gemini(monkeypatch, FakeModels([_chunk(types.Part(text="ok"), finish="STOP")]))
+    chart = {"X-Bundo-Chart-Id": str(uuid4())}
+    codes = [client.post("/agent/studio/turn", json=_turn(), headers=chart).status_code for _ in range(10)]
+    codes.append(client.post("/agent/studio/turn", json=_turn(), headers={"X-Bundo-Chart-Id": str(uuid4())}).status_code)
+    codes.append(client.post("/agent/studio/turn", json=_turn(), headers={"X-Bundo-Chart-Id": str(uuid4())}).status_code)
+    assert codes == [200] * 11 + [429]
+
+
+def test_chart_turns_are_capped(client, monkeypatch):
+    monkeypatch.setattr(deps, "MAX_TURNS_PER_CHART", 3)
+    _gemini(monkeypatch, FakeModels([_chunk(types.Part(text="ok"), finish="STOP")]))
+    chart = {"X-Bundo-Chart-Id": "chart-1"}
+    resps = [client.post("/agent/studio/turn", json=_turn(), headers=chart) for _ in range(4)]
+    assert [r.status_code for r in resps] == [200, 200, 200, 429]
+    assert "too many steps" in resps[-1].json()["detail"]
+    # The chart id is per merchant: another merchant using the same id starts fresh.
+    app.dependency_overrides[current_merchant] = lambda: CurrentMerchant(id=uuid4(), email="other@example.com")
+    assert client.post("/agent/studio/turn", json=_turn(), headers=chart).status_code == 200
+
+
+def test_studio_runs_on_the_lite_model(monkeypatch):
+    _settings(monkeypatch, gemini_api_key="k", gemini_model="main", gemini_fallback_model="lite")
+    assert studio.studio_llm()._models == ["lite"]
+    _settings(monkeypatch, gemini_api_key="k", gemini_model="main", gemini_fallback_model="lite", gemini_studio_model="charts")
+    assert studio.studio_llm()._models == ["charts"]
+    _settings(monkeypatch, gemini_api_key="")
+    assert studio.studio_llm() is None
+
+
+def test_minimal_thinking_is_requested_and_dropped_if_rejected(client, monkeypatch):
+    rejected = errors.APIError(400, {"error": {"code": 400, "message": "Thinking level MINIMAL is not supported."}})
+    models = _gemini(monkeypatch, FakeModels([_chunk(types.Part(text="ok"), finish="STOP")], fail=[rejected]))
+    events = _events(client.post("/agent/studio/turn", json=_turn()))
+    assert [e["type"] for e in events] == ["text_delta", "done"]
+    first, retry = models.calls[0]["config"], models.calls[1]["config"]
+    assert first.thinking_config.thinking_level == "MINIMAL" and retry.thinking_config is None
+    client.post("/agent/studio/turn", json=_turn())
+    assert models.calls[2]["config"].thinking_config is None  # remembered, no wasted call
 
 
 @pytest.mark.parametrize("name", ["submit_dispute_response", "prepare_response", "get_refunds"])

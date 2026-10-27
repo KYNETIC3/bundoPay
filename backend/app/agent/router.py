@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app.audit import audit
 from app.auth import CurrentMerchant, current_merchant
-from app.deps import llm_rate_limit
+from app.deps import chart_rate_limit, llm_rate_limit
 from app.db import connection
 from app.disputes.model import REASON_LABELS
 
@@ -18,7 +18,7 @@ from .chat import chat
 from .llm import ModelUnavailableError
 from .messages import post as post_message
 from .orchestrator import default_llm
-from .studio import MAX_BODY_BYTES, StudioTurnBody, build_config, build_contents, stream_turn
+from .studio import MAX_BODY_BYTES, StudioTurnBody, build_config, build_contents, stream_turn, studio_llm, thinking_level
 
 router = APIRouter()
 
@@ -239,22 +239,23 @@ async def agent_chat(body: ChatBody, merchant: CurrentMerchant = Depends(llm_rat
 
 
 @router.post("/agent/studio/turn")
-async def studio_turn(request: Request, merchant: CurrentMerchant = Depends(llm_rate_limit)) -> StreamingResponse:
-    """One AG Studio AI turn on Bundo's Gemini setup, streamed as SSE. See app/agent/studio.py for the shapes."""
+async def studio_turn(request: Request, merchant: CurrentMerchant = Depends(chart_rate_limit)) -> StreamingResponse:
+    """One AG Studio AI turn on Bundo's Gemini setup, streamed as SSE. See app/agent/studio.py for the shapes.
+    Send the same X-Bundo-Chart-Id on every turn of one chart so the chart counts as one request."""
     if int(request.headers.get("content-length") or 0) > MAX_BODY_BYTES:
         raise HTTPException(413, "That chart request is too large.")
     raw = await request.body()
     if len(raw) > MAX_BODY_BYTES:
         raise HTTPException(413, "That chart request is too large.")
+    llm = studio_llm()
     try:
         body = StudioTurnBody.model_validate_json(raw)
         system, contents = build_contents(body)
-        config = build_config(body, system)
+        config = build_config(body, system, thinking_level(llm) if llm else None)
     except ValidationError as exc:
         raise HTTPException(422, exc.errors(include_url=False, include_context=False)) from exc
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    llm = default_llm()
     if llm is None:
         raise HTTPException(503, {"code": "no_model", "message": "Chart building needs GEMINI_API_KEY in backend/.env."})
     return StreamingResponse(

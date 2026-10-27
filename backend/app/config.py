@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.8-flash"
     gemini_fallback_model: str = "gemini-3.5-flash-lite"  # used when the main model is busy or out of quota
+    # AG Studio chart turns (many short turns per chart). Empty means gemini_fallback_model.
+    gemini_studio_model: str = ""
+    gemini_studio_thinking_level: str = "MINIMAL"  # lowest the lite model accepts; empty sends no thinking config
 
     # App.
     frontend_url: str = "http://localhost:3000"
@@ -56,7 +59,7 @@ class Settings(BaseSettings):
     # Four sandbox account emails, comma-separated: operating, tax reserve, dispute buffer, ad spend.
     demo_account_emails: str = ""
     demo_reset_hour_utc: int = 3
-    # Gemini calls each signed-in user may make per rolling 10 minutes (chat and copilot).
+    # Gemini requests each signed-in user may make per rolling 10 minutes (chat, copilot, and each chart).
     llm_requests_per_10_minutes: int = 20
 
 
