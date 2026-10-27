@@ -72,10 +72,9 @@ const curated: Record<BoardId, (c: Columns) => AgReportState> = {
       "home",
       c,
       {
-        free: value("Free to spend", "Operating, after what it always keeps", "money", "free_to_spend"),
-        jarred: value("In your jars", "Tax, dispute cover and ads", "money", "set_aside"),
         atStake: value("At stake in disputes", "Open disputes, any age", "disputes", "at_stake"),
         handled: value("Handled by Bundo", "Disputes answered or refunded", "disputes", "handled", "avg"),
+        stopped: value("Stopped by safety checks", "Transfers blocked or held for you", "transfers", "stopped"),
         trend: {
           // Columns, not an area: a few transfers on a few days still read clearly.
           type: "column-chart-stacked",
@@ -84,7 +83,7 @@ const curated: Record<BoardId, (c: Columns) => AgReportState> = {
           format: { title: { enabled: true, text: "Money set aside, by jar" } },
         },
       },
-      flow(c, [["free", 1, 4], ["jarred", 1, 4], ["atStake", 1, 4], ["handled", 1, 4], ["trend", 4, 8]]),
+      flow(c, [["atStake", 1, 4], ["handled", 1, 4], ["stopped", 2, 4], ["trend", 4, 8]]),
     ),
 
   /** Is my money where it should be? */
