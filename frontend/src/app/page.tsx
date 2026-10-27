@@ -1,5 +1,6 @@
 "use client";
 
+import SimpleInsights from "@/components/SimpleInsights";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -13,6 +14,8 @@ import type { Insights, Overview as Treasury } from "@/lib/treasury";
 import type { DisputeSummary } from "@/lib/types";
 
 // AG Studio measures the page and uses localStorage, so it only ever renders in the browser.
+// AG Studio is licensed; without a key it watermarks the board, so the plain board is shown instead.
+const LICENSED = !!process.env.NEXT_PUBLIC_AG_STUDIO_LICENSE;
 const InsightsBoard = dynamic(() => import("@/components/InsightsBoard"), { ssr: false, loading: () => <BoardSkeleton /> });
 
 export default function InsightsPage() {
@@ -79,11 +82,11 @@ export default function InsightsPage() {
               <Button variant="ghost" className="min-h-9 text-[13px]" onClick={() => setResetSignal((n) => n + 1)}>Reset layout</Button>
             )}
             {/* Building widgets needs a wide screen; phones get the curated board only. */}
-            <span className="hidden sm:contents">
+            {LICENSED && <span className="hidden sm:contents">
               <Button variant={editing ? "primary" : "ghost"} className="min-h-9 text-[13px]" onClick={() => setEditing(!editing)}>
                 {editing ? "Done" : <><Icon name="tune" className="text-[16px]" /> Customize</>}
               </Button>
-            </span>
+            </span>}
           </div>
         </div>
 
@@ -97,7 +100,9 @@ export default function InsightsPage() {
             </Empty>
           </Card>
         ) : (
-          <InsightsBoard currency={currency} disputes={disputes} insights={insights} days={days} editing={editing} resetSignal={resetSignal} />
+          !LICENSED ? (
+            <SimpleInsights currency={currency} disputes={disputes} insights={insights} days={days} />
+          ) : <InsightsBoard currency={currency} disputes={disputes} insights={insights} days={days} editing={editing} resetSignal={resetSignal} />
         )}
       </section>
 
