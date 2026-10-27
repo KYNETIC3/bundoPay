@@ -1,13 +1,14 @@
 "use client";
 
-import { AllCommunityModule, ModuleRegistry, themeQuartz, type ColDef, type ICellRendererParams, type PostSortRowsParams } from "ag-grid-community";
+import { AllCommunityModule, ModuleRegistry, type ColDef, type ICellRendererParams, type PostSortRowsParams } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import Link from "next/link";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
 import { money } from "@/lib/format";
 import { agentState, disputeStatus } from "@/lib/status";
+import { gridTheme } from "@/lib/studio/theme";
 import type { DisputeSummary } from "@/lib/types";
 
 import { Countdown } from "./Countdown";
@@ -15,25 +16,6 @@ import { Button, Icon, Pill } from "./ui";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-const theme = themeQuartz.withParams({
-  fontFamily: "inherit",
-  fontSize: 14,
-  foregroundColor: "var(--color-ink)",
-  backgroundColor: "var(--color-card)",
-  accentColor: "var(--color-primary)",
-  borderColor: "rgb(54 33 62 / 0.06)",
-  headerBackgroundColor: "var(--color-card)",
-  headerTextColor: "var(--color-muted)",
-  headerFontSize: 13,
-  headerFontWeight: 500,
-  headerColumnBorder: false,
-  rowHoverColor: "#f8fbfc",
-  wrapperBorder: false,
-  wrapperBorderRadius: 0,
-  rowHeight: 68,
-  headerHeight: 40,
-  cellHorizontalPadding: 16,
-});
 
 /** What row buttons can do; passed to cells through the grid's context so the column defs stay static. */
 type Ctx = { act: (id: string, what: "clear" | "restore") => void };
@@ -174,10 +156,12 @@ export function DisputeTable({ items, onChanged }: { items: DisputeSummary[]; on
     }),
     [],
   );
+  const narrow = useNarrow();
+  if (narrow) return <DisputeCards items={items} act={context.act} />;
   return (
     <div className="-mx-7">
       <AgGridReact<DisputeSummary>
-        theme={theme}
+        theme={gridTheme}
         rowData={items}
         columnDefs={columns}
         context={context}
@@ -190,6 +174,52 @@ export function DisputeTable({ items, onChanged }: { items: DisputeSummary[]; on
       />
     </div>
   );
+}
+
+/** Phones get one card per dispute instead of a wide table: what it's about, how much, how long is left, and
+ * the one thing to do next. */
+function DisputeCards({ items, act }: { items: DisputeSummary[]; act: Ctx["act"] }) {
+  const sorted = [...items].sort((a, b) => Number(isOpen(b)) - Number(isOpen(a)) || (a.due_date ?? "~").localeCompare(b.due_date ?? "~"));
+  return (
+    <ul className="-mx-2 divide-y divide-ink/[0.06]">
+      {sorted.map((d) => {
+        const a = agentState({ status: d.status, draft_status: d.draft_status ?? null, draft_action: d.draft_action ?? null });
+        const ready = d.draft_status === "awaiting_approval" && isOpen(d);
+        return (
+          <li key={d.id} className={`flex items-start gap-3 px-2 py-4 ${isOpen(d) ? "" : "opacity-60"}`}>
+            <Link href={ready ? `/money/disputes/${d.id}/approve` : `/money/disputes/${d.id}`} className="press min-w-0 flex-1">
+              <span className="flex items-baseline justify-between gap-3">
+                <span className="truncate font-semibold">{d.reason_label ?? "Dispute"}</span>
+                <span className="shrink-0 font-semibold tabular-nums">{money(d.amount, d.currency)}</span>
+              </span>
+              <span className="mt-2 flex flex-wrap items-center gap-2">
+                <Pill tone={a.tone}>{a.label}</Pill>
+                {isOpen(d) && d.due_date && <span className="text-[13px]"><Countdown due={d.due_date} /></span>}
+              </span>
+            </Link>
+            {d.clearable && !d.cleared && (
+              <button onClick={() => act(d.id, "clear")} aria-label="Clear" className="grid h-10 w-10 place-items-center rounded-full text-muted hover:bg-soft"><Icon name="inventory_2" className="text-[18px]" /></button>
+            )}
+            {d.cleared && (
+              <button onClick={() => act(d.id, "restore")} aria-label="Restore" className="grid h-10 w-10 place-items-center rounded-full text-muted hover:bg-soft"><Icon name="unarchive" className="text-[18px]" /></button>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function useNarrow() {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const q = window.matchMedia("(max-width: 639px)");
+    const on = () => setNarrow(q.matches);
+    on();
+    q.addEventListener("change", on);
+    return () => q.removeEventListener("change", on);
+  }, []);
+  return narrow;
 }
 
 export function unresolvedCount(items: DisputeSummary[] | null | undefined): number {

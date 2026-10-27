@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Button, Card, Icon, Pill } from "@/components/ui";
 import { api, json } from "@/lib/api";
+import { feedback } from "@/lib/feedback";
 import { dateTime, humanize, money } from "@/lib/format";
 import { disputeStatus } from "@/lib/status";
 import type { DisputeDetail, Draft } from "@/lib/types";
@@ -71,7 +72,7 @@ export default function ApprovePage() {
       setBusy(false);
     }
   }
-  const approve = () => run(async () => setDone(await api<Confirmation>(`/drafts/${draft.id}/approve`, json({ payload_hash: draft.payload_hash, acknowledge_past_due: ackLate }))));
+  const approve = () => run(async () => { setDone(await api<Confirmation>(`/drafts/${draft.id}/approve`, json({ payload_hash: draft.payload_hash, acknowledge_past_due: ackLate }))); feedback("approved"); });
   const save = () =>
     run(async () => {
       await api(`/drafts/${draft.id}`, { method: "PUT", body: JSON.stringify({ payload: editing }) });
