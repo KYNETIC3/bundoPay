@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
-from app.adapters.csv_adapter import CsvValidationError, import_csv
+from app.adapters.csv_adapter import SCHEMAS, CsvValidationError, import_csv
 from app.agent.orchestrator import run_agent
 from app.approvals import service as approvals
 from app.approvals.tokens import ApprovalError
@@ -298,3 +298,21 @@ async def data_summary(merchant: CurrentMerchant = Depends(current_merchant)) ->
             (merchant.id,),
         )
         return await cur.fetchall()
+
+
+@router.get("/data/records")
+async def data_records(
+    kind: str, limit: int = Query(5000, ge=1, le=5000), merchant: CurrentMerchant = Depends(current_merchant)
+) -> dict:
+    if kind not in SCHEMAS:
+        raise HTTPException(400, f"Unknown file kind '{kind}'")
+    # Every row carries the same columns (absent optional ones are null) so dashboards can join on them.
+    columns = SCHEMAS[kind]["required"] + SCHEMAS[kind]["optional"]
+    async with connection() as conn:
+        cur = await conn.execute(
+            "select data from merchant_records where merchant_id = %s and kind = %s "
+            "order by imported_at desc, id desc limit %s",
+            (merchant.id, kind, limit),
+        )
+        rows = await cur.fetchall()
+    return {"kind": kind, "rows": [{c: (r["data"] or {}).get(c) for c in columns} for r in rows]}
