@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any, Protocol
 
 ToolCaller = Callable[[str, dict[str, Any]], Awaitable[Any]]
@@ -31,15 +31,15 @@ class GeminiLLM:
         self._models = [m for m in (model, fallback_model) if m]
         self.name = f"gemini:{model}"
 
-    async def _generate(self, contents: list[Any], config: Any) -> Any:
-        """generate_content with retries when Gemini is overloaded or rate-limited, then the fallback model."""
+    async def _with_retries(self, call: Callable[[str], Awaitable[Any]]) -> Any:
+        """Run call(model) with retries when Gemini is overloaded or rate-limited, then the fallback model."""
         from google.genai import errors
 
         last: errors.APIError | None = None
         for model in self._models:
             for attempt in range(RETRY_ATTEMPTS):
                 try:
-                    return await self._client.aio.models.generate_content(model=model, contents=contents, config=config)
+                    return await call(model)
                 except errors.APIError as exc:
                     if exc.code not in (429, 500, 503):
                         raise
@@ -49,6 +49,25 @@ class GeminiLLM:
                     await asyncio.sleep(2**attempt)
         code = last.code if last else "?"
         raise ModelUnavailableError(f"Gemini is unavailable right now ({code}). Please try again in a minute.") from last
+
+    async def _generate(self, contents: list[Any], config: Any) -> Any:
+        return await self._with_retries(
+            lambda model: self._client.aio.models.generate_content(model=model, contents=contents, config=config)
+        )
+
+    async def stream(self, contents: list[Any], config: Any) -> AsyncIterator[tuple[str, Any]]:
+        """Stream (model, chunk) pairs. Retries happen only until the first chunk arrives, so nothing is repeated."""
+
+        async def open_stream(model: str) -> tuple[str, Any, Any]:
+            chunks = await self._client.aio.models.generate_content_stream(model=model, contents=contents, config=config)
+            return model, chunks, await anext(chunks, None)
+
+        model, chunks, first = await self._with_retries(open_stream)
+        if first is None:
+            return
+        yield model, first
+        async for chunk in chunks:
+            yield model, chunk
 
     async def run(self, system: str, user: str, tools: list[dict[str, Any]], call_tool: ToolCaller) -> str:
         from google.genai import types

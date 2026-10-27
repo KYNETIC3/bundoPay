@@ -4,8 +4,9 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field, ValidationError
 
 from app.audit import audit
 from app.auth import CurrentMerchant, current_merchant
@@ -17,6 +18,7 @@ from .chat import chat
 from .llm import ModelUnavailableError
 from .messages import post as post_message
 from .orchestrator import default_llm
+from .studio import MAX_BODY_BYTES, StudioTurnBody, build_config, build_contents, stream_turn
 
 router = APIRouter()
 
@@ -234,3 +236,29 @@ async def agent_chat(body: ChatBody, merchant: CurrentMerchant = Depends(llm_rat
         )
         await conn.execute("update agent_messages set read_at = now() where merchant_id = %s and read_at is null", (merchant.id,))
     return {"status": "ok"}
+
+
+@router.post("/agent/studio/turn")
+async def studio_turn(request: Request, merchant: CurrentMerchant = Depends(llm_rate_limit)) -> StreamingResponse:
+    """One AG Studio AI turn on Bundo's Gemini setup, streamed as SSE. See app/agent/studio.py for the shapes."""
+    if int(request.headers.get("content-length") or 0) > MAX_BODY_BYTES:
+        raise HTTPException(413, "That chart request is too large.")
+    raw = await request.body()
+    if len(raw) > MAX_BODY_BYTES:
+        raise HTTPException(413, "That chart request is too large.")
+    try:
+        body = StudioTurnBody.model_validate_json(raw)
+        system, contents = build_contents(body)
+        config = build_config(body, system)
+    except ValidationError as exc:
+        raise HTTPException(422, exc.errors(include_url=False, include_context=False)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    llm = default_llm()
+    if llm is None:
+        raise HTTPException(503, {"code": "no_model", "message": "Chart building needs GEMINI_API_KEY in backend/.env."})
+    return StreamingResponse(
+        stream_turn(llm, contents, config),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
