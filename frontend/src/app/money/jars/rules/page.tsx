@@ -13,7 +13,7 @@ import {
 
 const KINDS: PolicyKind[] = ["tax_reserve", "dispute_buffer", "ad_sweep", "rebalance"];
 
-export default function PoliciesPage() {
+export default function RulesPage() {
   const { data, error, reload } = useLive<Overview>("/treasury/overview", 30_000);
   if (error) return <Card><p className="text-sm text-danger">{error}</p></Card>;
   if (!data) return <Card><p className="text-sm text-muted">Loading…</p></Card>;
@@ -34,8 +34,8 @@ export default function PoliciesPage() {
       <div className="rounded-[20px] bg-card shadow-card">
         {data.policies.length === 0 ? (
           <div className="p-7">
-            <Empty icon="rule" title="No policies yet">
-              Start with a tax reserve, or describe what you want with Copilot and it will draft the policies for you.
+            <Empty icon="rule" title="No rules yet">
+              Start with the Tax jar, or describe what you want with Copilot and it will draft the rules for you.
             </Empty>
           </div>
         ) : (
@@ -66,7 +66,7 @@ function NewPolicy({ kinds }: { kinds: PolicyKind[] }) {
   return (
     <div ref={box} className="relative">
       <Button variant="primary" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((o) => !o)}>
-        <Icon name="add" className="text-[18px]" /> New policy
+        <Icon name="add" className="text-[18px]" /> New rule
       </Button>
       {open && (
         <div role="menu" className="absolute right-0 top-full z-40 mt-2 w-[320px] rounded-2xl bg-card p-1.5 shadow-lift ring-1 ring-ink/[0.06]">
@@ -110,7 +110,7 @@ function PolicyRow({ p, currency, onChanged }: { p: Policy; currency: string; on
         setNote(
           r.status === "allowed" ? (r.execution === "succeeded" ? "Done. PayPal confirmed the transfer." : "Sent to PayPal. Waiting for confirmation.")
           : r.status === "needs_approval" ? "This one needs your OK. You'll find it on Overview."
-          : r.status === "skipped" ? "Nothing to move: every reserve is already on target."
+          : r.status === "skipped" ? "Nothing to move: every jar is already full enough."
           : `Stopped: ${CHECK_LABELS[check]?.toLowerCase() ?? "a safety check failed"}. Nothing moved.`,
         );
       }

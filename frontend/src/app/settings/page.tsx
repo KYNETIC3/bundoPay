@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { Button, Card, CardTitle, Icon, Pill } from "@/components/ui";
 import { api } from "@/lib/api";
+import { feedback, feedbackPrefs, setFeedbackPrefs } from "@/lib/feedback";
 import { FEATURE_COPY, dateTime } from "@/lib/format";
 import { useMerchant } from "@/lib/merchant";
 
@@ -17,7 +18,52 @@ export default function SettingsPage() {
       <PayPalCard />
       <RefundLimitCard />
       <StoreDataCard />
+      <FeelCard />
     </div>
+  );
+}
+
+/** Sound and haptics are off until the merchant asks for them; the visual confirmations always show. */
+function FeelCard() {
+  const [prefs, setPrefs] = useState({ sound: false, haptics: false });
+  const [canBuzz, setCanBuzz] = useState(false);
+  useEffect(() => {
+    setPrefs(feedbackPrefs());
+    setCanBuzz(typeof navigator !== "undefined" && "vibrate" in navigator);
+  }, []);
+  function toggle(key: "sound" | "haptics") {
+    const next = { ...prefs, [key]: !prefs[key] };
+    setPrefs(next);
+    setFeedbackPrefs(next);
+    if (next[key]) feedback("approved");
+  }
+  const row = (key: "sound" | "haptics", title: string, hint: string, disabled = false) => (
+    <li className="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0">
+      <div>
+        <p className="font-medium">{title}</p>
+        <p className="mt-0.5 text-[13px] text-muted">{hint}</p>
+      </div>
+      <button
+        role="switch"
+        aria-checked={prefs[key]}
+        aria-label={title}
+        disabled={disabled}
+        onClick={() => toggle(key)}
+        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-40 ${prefs[key] ? "bg-primary" : "bg-ink/20"}`}
+      >
+        <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform duration-200 [transition-timing-function:var(--ease-out)] motion-reduce:transition-none ${prefs[key] ? "translate-x-[22px]" : "translate-x-0.5"}`} />
+      </button>
+    </li>
+  );
+  return (
+    <Card>
+      <CardTitle>Sounds and haptics</CardTitle>
+      <ul className="divide-y divide-ink/[0.06]">
+        {row("sound", "Sounds", "A soft chime when money moves, a transfer is approved or an answer is sent.")}
+        {row("haptics", "Haptics", canBuzz ? "A light tap on your phone for the same moments." : "Not supported on this device.", !canBuzz)}
+      </ul>
+      <p className="mt-4 text-xs text-muted">Animations follow your device&rsquo;s reduce-motion setting.</p>
+    </Card>
   );
 }
 
@@ -37,7 +83,7 @@ function DemoCard() {
     setMessage(null);
     try {
       await api("/demo/reset", { method: "POST" });
-      setMessage("Done. Treasury, chat and history are back to the starting point.");
+      setMessage("Done. Jars, chat and history are back to the starting point.");
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Reset failed.");
     }

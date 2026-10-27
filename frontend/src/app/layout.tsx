@@ -10,7 +10,7 @@ const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrai
 
 export const metadata: Metadata = {
   title: "BundoPay",
-  description: "Your PayPal disputes, handled by Bundo, within limits you set.",
+  description: "Know what you can spend. Bundo fills your tax, dispute and ad jars and handles PayPal disputes, within limits you set.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

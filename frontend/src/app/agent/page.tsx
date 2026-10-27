@@ -46,7 +46,7 @@ type Message = {
 const KIND: Record<string, { icon: string; tone: string; label: string }> = {
   auto_refund: { icon: "currency_exchange", tone: "bg-ink text-white", label: "Refunded" },
   decision: { icon: "approval", tone: "bg-primary text-white", label: "Needs your OK" },
-  treasury_approval: { icon: "account_balance", tone: "bg-primary text-white", label: "Treasury: needs your OK" },
+  treasury_approval: { icon: "account_balance", tone: "bg-primary text-white", label: "Jars: needs your OK" },
   submitted: { icon: "send", tone: "bg-primary-fixed text-primary", label: "Sent" },
   outcome: { icon: "flag", tone: "bg-soft text-ink-2", label: "Closed" },
   failed: { icon: "error", tone: "bg-danger-soft text-danger", label: "Didn't go through" },
