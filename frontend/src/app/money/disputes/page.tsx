@@ -23,12 +23,12 @@ const needsYou = (d: DisputeSummary) =>
 // Three questions a merchant actually asks; everything else lives behind the ⋯ menu.
 const FILTERS: { key: string; label: string; test: (d: DisputeSummary) => boolean }[] = [
   { key: "you", label: "Needs you", test: needsYou },
-  { key: "paypal", label: "With PayPal or buyer", test: (d) => isOpen(d) && !needsYou(d) },
+  { key: "paypal", label: "With PayPal", test: (d) => isOpen(d) && !needsYou(d) },
   { key: "finished", label: "Finished", test: (d) => !isOpen(d) },
 ];
 
 const tab = (on: boolean) =>
-  `press inline-flex min-h-9 items-center gap-2 rounded-full px-4 text-[14px] transition ${
+  `press inline-flex min-h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-4 text-[14px] transition ${
     on ? "bg-card font-semibold text-ink shadow-[0_1px_3px_rgb(54_33_62/0.1)]" : "font-medium text-ink-2 hover:text-ink"
   }`;
 
@@ -74,8 +74,8 @@ export default function DisputesPage() {
       {ready && all.length > 0 && <Board id="disputes" data={model} store={hasStore} />}
 
       <Card>
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-          <div role="tablist" aria-label="Filter disputes" className="-mx-1 inline-flex max-w-full gap-1 overflow-x-auto rounded-full bg-soft p-1">
+        <div className="mb-6 flex items-center justify-between gap-2">
+          <div role="tablist" aria-label="Filter disputes" className="no-scrollbar inline-flex min-w-0 gap-1 overflow-x-auto rounded-full bg-soft p-1">
             {FILTERS.map((f) => (
               <button key={f.key} role="tab" aria-selected={!showCleared && f.key === key} onClick={() => { setShowCleared(false); setFilter(f.key); }} className={tab(!showCleared && f.key === key)}>
                 {f.label}<span className="text-xs text-muted tabular-nums">{all.filter(f.test).length}</span>

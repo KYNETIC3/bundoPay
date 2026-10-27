@@ -47,7 +47,37 @@ export function BalanceHero({ overview, actions }: { overview: Overview; actions
             ? `Operating is below the ${money(String(floor), c)} it always keeps.`
             : <>After the <span className="tabular-nums">{money(String(floor), c)}</span> Operating always keeps. <span className="tabular-nums">{money(String(jarred), c)}</span> is in your jars.</>}
       </p>
+      {op && op.balance !== null && floor > 0 && <FloorMeter operating={Math.max(0, Number(op.balance))} floor={floor} currency={c} />}
     </section>
+  );
+}
+
+/** Operating against what it always keeps: the bar fills toward the floor marker, and anything past it is free.
+ * Colour is never the only signal; the label underneath says the same thing in words. */
+function FloorMeter({ operating, floor, currency }: { operating: number; floor: number; currency: string }) {
+  const scale = Math.max(operating, floor) * 1.15;
+  const fill = Math.min(100, (operating / scale) * 100);
+  const mark = (floor / scale) * 100;
+  const below = operating < floor;
+  return (
+    <div className="mt-7">
+      <div
+        role="meter"
+        aria-label="Operating balance against what it always keeps"
+        aria-valuemin={0}
+        aria-valuemax={Math.round(scale)}
+        aria-valuenow={Math.round(operating)}
+        aria-valuetext={`${money(String(operating), currency)} of ${money(String(floor), currency)} kept`}
+        className="relative h-3 rounded-full bg-soft"
+      >
+        <span className={`absolute inset-y-0 left-0 rounded-full transition-[width] duration-700 [transition-timing-function:var(--ease-out)] motion-reduce:transition-none ${below ? "bg-danger/70" : "bg-ink"}`} style={{ width: `${fill}%` }} />
+        <span className="absolute -inset-y-1 w-0.5 rounded-full bg-ink-2" style={{ left: `${mark}%` }} aria-hidden />
+      </div>
+      <div className="mt-2 flex justify-between gap-4 text-xs text-muted">
+        <span>Operating <b className="font-semibold text-ink-2 tabular-nums">{money(String(operating), currency)}</b></span>
+        <span>Always keeps <b className="font-semibold text-ink-2 tabular-nums">{money(String(floor), currency)}</b></span>
+      </div>
+    </div>
   );
 }
 

@@ -80,6 +80,10 @@ body { background: var(--color-page); color: var(--color-ink); font-family: var(
   .press:active { transform: none; }
 }
 
+/* Horizontal pill rows scroll without showing a bar. */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
 /* Phones keep the bottom tab bar clear of the home indicator. */
 .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 6px); }
 

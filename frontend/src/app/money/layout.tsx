@@ -36,7 +36,7 @@ export default function MoneyLayout({ children }: { children: React.ReactNode })
   return (
     <div className="space-y-8">
       <nav aria-label="Money views" className="sticky top-16 z-30 md:top-4">
-        <div className="relative grid w-full grid-cols-2 rounded-full bg-ink/[0.06] p-1 backdrop-blur-xl sm:inline-grid sm:w-auto">
+        <div className="relative grid w-full grid-cols-2 rounded-full bg-[#e9eef1]/90 p-1 shadow-[0_6px_20px_-12px_rgb(54_33_62/0.35)] backdrop-blur-xl sm:inline-grid sm:w-auto">
           {/* One pill slides between the two views, so the switch feels like one control, not two links. */}
           <span
             aria-hidden

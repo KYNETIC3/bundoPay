@@ -51,7 +51,7 @@ function flow(columns: Columns, items: [string, 1 | 2 | 4, number][]): Record<st
   let y = 0;
   let rowRows = 0;
   for (const [id, wide, rows] of items) {
-    const span = columns === 4 ? wide : wide === 4 ? 2 : 1;
+    const span = columns === 4 ? wide : wide >= 2 ? 2 : 1;
     const r = columns === 2 && span === 1 ? rows + 1 : rows; // phone tiles are half as wide, so titles wrap
     if (x + span > columns) {
       y += rowRows;
@@ -92,11 +92,6 @@ const curated: Record<BoardId, (c: Columns) => AgReportState> = {
       "jars",
       c,
       {
-        gauge: {
-          type: "linear-gauge",
-          dataMapping: { value: [{ id: "money.operating", aggregation: "sum" }] },
-          format: { title: { enabled: true, text: "Operating balance" }, caption: { enabled: true, text: "The marker is what it always keeps; everything above is free to spend" }, crossFilter: "none" },
-        },
         trend: {
           type: "column-chart-stacked",
           dataMapping: { categoryKey: [{ id: "moved.day" }], valueKey: [{ id: "moved.amount", aggregation: "sum" }], legendKey: [{ id: "moved.jar" }] },
@@ -104,7 +99,7 @@ const curated: Record<BoardId, (c: Columns) => AgReportState> = {
           format: { title: { enabled: true, text: "Set aside each day, by jar" }, crossFilter: "filter" },
         },
       },
-      flow(c, [["gauge", 4, 4], ["trend", 4, 8]]),
+      flow(c, [["trend", 4, 8]]),
     ),
 
   /** What do I need to fight? */

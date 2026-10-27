@@ -5,7 +5,7 @@ export function Icon({ name, className = "" }: { name: string; className?: strin
 }
 
 export function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <div className={`rounded-[20px] bg-card p-7 shadow-card ${className}`}>{children}</div>;
+  return <div className={`rounded-[20px] bg-card p-5 shadow-card sm:p-7 ${className}`}>{children}</div>;
 }
 
 export function CardTitle({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {

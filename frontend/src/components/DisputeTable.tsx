@@ -181,9 +181,11 @@ export function DisputeTable({ items, onChanged }: { items: DisputeSummary[]; on
 function DisputeCards({ items, act }: { items: DisputeSummary[]; act: Ctx["act"] }) {
   const sorted = [...items].sort((a, b) => Number(isOpen(b)) - Number(isOpen(a)) || (a.due_date ?? "~").localeCompare(b.due_date ?? "~"));
   return (
-    <ul className="-mx-2 divide-y divide-ink/[0.06]">
+    <ul className="-mx-1 divide-y divide-ink/[0.06]">
       {sorted.map((d) => {
-        const a = agentState({ status: d.status, draft_status: d.draft_status ?? null, draft_action: d.draft_action ?? null });
+        const agent = agentState({ status: d.status, draft_status: d.draft_status ?? null, draft_action: d.draft_action ?? null });
+        // When Bundo has nothing to say yet, the PayPal status is the useful one.
+        const a = agent.label === "—" ? disputeStatus(d.status) : agent;
         const ready = d.draft_status === "awaiting_approval" && isOpen(d);
         return (
           <li key={d.id} className={`flex items-start gap-3 px-2 py-4 ${isOpen(d) ? "" : "opacity-60"}`}>

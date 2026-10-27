@@ -51,7 +51,9 @@ export function buildModel({ currency, overview, insights, disputes, records = {
   const moved = moves.filter((m) => setAside(m) > 0).map((m) => ({ day: startOfDay(new Date(m.created_at)), jar: ROLE_LABELS[m.role!], amount: setAside(m) }));
   // A zero for every day in range, so the axis shows the whole period rather than one wide bar.
   const today = startOfDay(new Date());
-  const quiet = moved.length ? Array.from({ length: days }, (_, i) => ({ day: new Date(today.getTime() - i * DAY), jar: moved[0].jar, amount: 0 })) : [];
+  // With nothing moved yet, the chart still shows the period, flat, rather than "No data".
+  const quietJar = moved[0]?.jar ?? ROLE_LABELS[jars[0]?.role ?? "tax_reserve"];
+  const quiet = Array.from({ length: days }, (_, i) => ({ day: new Date(today.getTime() - i * DAY), jar: quietJar, amount: 0 }));
 
   const tracked = new Set((records.shipments ?? []).filter((s) => s.tracking_number).map((s) => s.order_id));
   const orderByTxn = new Map((records.orders ?? []).map((o) => [o.paypal_transaction_id, o.order_id]));
@@ -93,13 +95,14 @@ export function buildModel({ currency, overview, insights, disputes, records = {
       {
         id: "transfers",
         name: "Transfers",
-        data: moves.map((m) => ({
+        // A zero row keeps the tiles reading 0 instead of "No data" before the first transfer.
+        data: moves.length ? moves.map((m) => ({
           when: new Date(m.created_at),
           jar: m.role ? ROLE_LABELS[m.role] : "Other",
           amount: Number(m.amount),
           outcome: m.verdict === "block" ? "Stopped" : m.verdict === "ask" ? "Waited for you" : setAside(m) > 0 ? "Moved" : "Not sent",
           stopped: m.verdict === "block" || m.verdict === "ask" ? 1 : 0,
-        })),
+        })) : [{ when: null, jar: null, amount: 0, outcome: null, stopped: 0 }],
         fields: [
           { id: "when", name: "When", format: "dateFormat", formatOptions: { format: "d mmm" } },
           { id: "jar", name: "To", format: "textFormat" },

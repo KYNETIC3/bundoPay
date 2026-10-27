@@ -37,8 +37,9 @@ export default function AccountsPage() {
               <button onClick={() => setOpenId(a.id)} className="press flex w-full items-center gap-4 px-5 py-4 text-left transition hover:bg-soft/60">
                 <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary-fixed text-primary"><Icon name={ROLE_ICON[a.role] ?? "wallet"} /></span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-semibold">{a.name}</span>
-                  <span className="mt-0.5 block text-[13px] text-muted">{ROLE_LABELS[a.role]}</span>
+                  <span className="block truncate font-semibold">{ROLE_LABELS[a.role]}</span>
+                  {/* The merchant's own name for it, only when it says something the jar name doesn't. */}
+                  {a.name.trim().toLowerCase() !== ROLE_LABELS[a.role].toLowerCase() && <span className="mt-0.5 block truncate text-[13px] text-muted">{a.name}</span>}
                 </span>
                 <span className="text-right">
                   <span className="block font-semibold tabular-nums">{money(balance(a), data.limits.currency)}</span>
@@ -59,7 +60,7 @@ export default function AccountsPage() {
 
       <LimitsSummary limits={data.limits} onSaved={reload} />
 
-      <Sheet open={!!current} onClose={() => setOpenId(null)} title={current?.name ?? "Account"}>
+      <Sheet open={!!current} onClose={() => setOpenId(null)} title={current ? ROLE_LABELS[current.role] : "Account"}>
         {current && <AccountDetail a={current} onChanged={() => { changed(); reload(); }} />}
       </Sheet>
       <Sheet open={adding} onClose={() => setAdding(false)} title="Add an account">
@@ -116,7 +117,7 @@ function AccountDetail({ a, onChanged }: { a: Account; onChanged: () => void }) 
         </form>
       ) : (
         <dl className="divide-y divide-ink/[0.06] rounded-2xl bg-card px-5">
-          <Row label="Used for">{ROLE_LABELS[a.role]}</Row>
+          <Row label="Name">{a.name}</Row>
           <Row label="PayPal email"><span className="break-all">{a.paypal_email}</span></Row>
           <Row label="Status">{a.verified_at ? "Verified with PayPal" : a.role === "operating" ? "Not confirmed yet" : "Not verified: nothing can be sent here yet"}</Row>
         </dl>

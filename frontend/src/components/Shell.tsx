@@ -149,7 +149,7 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
       </nav>
 
       <main className="mx-auto w-full max-w-[1256px] space-y-8 px-4 pb-16 pt-6 md:px-12 md:pt-10">
-        <header className="flex flex-wrap items-end justify-between gap-4">
+        <header className="flex items-start justify-between gap-4 sm:items-end">
           <div className="min-w-0">
             {back ? (
               <Link href={back.href} className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:text-ink">
