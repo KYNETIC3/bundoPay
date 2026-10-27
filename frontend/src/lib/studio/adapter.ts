@@ -9,6 +9,13 @@ type StudioEvent = Record<string, unknown> & { type: string };
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+/** One id per chart the merchant asks for. A chart takes many model turns; the backend counts it once against
+ * the merchant's AI limit by this id. */
+let chartId: string | null = null;
+export function startChart() {
+  chartId = crypto.randomUUID();
+}
+
 /** What the backend streams from `POST /agent/studio/turn` (one JSON object per SSE `data:` line). */
 type Wire =
   | { type: "text_delta"; text: string }
@@ -44,7 +51,7 @@ export const bundoAdapter: AgLlmAdapter = {
         const { data } = await supabase().auth.getSession();
         const res = await fetch(`${BASE}/agent/studio/turn`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "text/event-stream", ...(data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {}) },
+          headers: { "Content-Type": "application/json", Accept: "text/event-stream", ...(chartId ? { "X-Bundo-Chart-Id": chartId } : {}), ...(data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {}) },
           body: JSON.stringify({ instructions: request.instructions, conversation: request.input, tools: request.tools ?? [], output_format: request.responseFormat, tool_choice: request.toolChoice }),
           signal: options?.signal,
         });

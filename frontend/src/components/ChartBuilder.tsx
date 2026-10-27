@@ -5,7 +5,7 @@ import { AgStudio, AgStudioProvider } from "ag-studio-react";
 import { useEffect, useRef, useState } from "react";
 
 import { feedback } from "@/lib/feedback";
-import { bundoAdapter } from "@/lib/studio/adapter";
+import { bundoAdapter, startChart } from "@/lib/studio/adapter";
 import { type BoardId, type Widget, pinToBoard } from "@/lib/studio/boards";
 import { boardTheme } from "@/lib/studio/theme";
 import { useMoneyModel } from "@/lib/studio/useModel";
@@ -56,6 +56,7 @@ export function ChartBuilder() {
     setPinned(null);
     setProblem(null);
     setStatus("running");
+    startChart();
     studio.current?.api?.setState(EMPTY);
     try {
       session.current ??= await harness.current.createThread({ agentId: harness.current.agents[0]?.id ?? "lead", title: "Charts" });
