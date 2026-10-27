@@ -13,7 +13,7 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 type Wire =
   | { type: "text_delta"; text: string }
   | { type: "tool_call"; id: string; name: string; arguments: string }
-  | { type: "done"; usage?: { input_tokens?: number; output_tokens?: number } }
+  | { type: "done"; usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number } }
   | { type: "error"; message: string };
 
 /** AG Studio's AI never talks to a model itself: this adapter sends each chart-building turn to BundoPay's backend,
@@ -61,7 +61,7 @@ export const bundoAdapter: AgLlmAdapter = {
             push({ type: "TOOL_CALL_END", toolCallId: w.id });
             output.push({ id: w.id, kind: "output", type: "function_call", callId: w.id, name: w.name, arguments: w.arguments, status: "completed" });
           } else if (w.type === "done") {
-            usage = { inputTokens: w.usage?.input_tokens ?? 0, outputTokens: w.usage?.output_tokens ?? 0 };
+            usage = { inputTokens: w.usage?.inputTokens ?? 0, outputTokens: w.usage?.outputTokens ?? 0, totalTokens: w.usage?.totalTokens };
           } else if (w.type === "error") {
             throw new Error(w.message);
           }
