@@ -4,7 +4,7 @@ import { type AgDataSourcesDefinition, type AgReportState, enableStudioDevValida
 import { AgStudio, AgStudioProvider } from "ag-studio-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { type BoardId, type Columns, GAP, ROW_HEIGHT, curatedBoard, rowsUsed, saveBoard, savedBoard } from "@/lib/studio/boards";
+import { type BoardId, type Columns, GAP, ROW_HEIGHT, curatedBoard, forPhone, rowsUsed, saveBoard, savedBoard } from "@/lib/studio/boards";
 import { boardTheme } from "@/lib/studio/theme";
 
 if (process.env.NODE_ENV !== "production") enableStudioDevValidations();
@@ -32,7 +32,12 @@ export default function Board({ id, data, store = false, editing = false, resetS
   const studio = useRef<AgStudio>(null);
   // Phones get two columns; the four-column layout is the one merchants customise and save.
   const [columns] = useState<Columns>(() => (typeof window !== "undefined" && window.innerWidth < 640 ? 2 : 4));
-  const [initialState] = useState(() => state ?? (columns === 4 ? savedBoard(id) : undefined) ?? curatedBoard(id, columns, { store }));
+  const [initialState] = useState(() => {
+    if (state) return state;
+    const saved = savedBoard(id);
+    if (saved) return columns === 4 ? saved : forPhone(saved);
+    return curatedBoard(id, columns, { store });
+  });
   const [rows, setRows] = useState(() => rowsUsed(initialState));
 
   const onStateUpdated = useCallback(
@@ -57,11 +62,11 @@ export default function Board({ id, data, store = false, editing = false, resetS
     if (state) return;
     const onChange = (e: Event) => {
       const next = (e as CustomEvent<BoardId>).detail === id && savedBoard(id);
-      if (next && !editing) studio.current?.api?.setState(next);
+      if (next && !editing) studio.current?.api?.setState(columns === 4 ? next : forPhone(next));
     };
     window.addEventListener("board-changed", onChange);
     return () => window.removeEventListener("board-changed", onChange);
-  }, [id, editing, state]);
+  }, [id, editing, state, columns]);
 
   return (
     <div

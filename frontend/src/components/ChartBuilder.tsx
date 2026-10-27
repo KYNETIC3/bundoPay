@@ -1,12 +1,12 @@
 "use client";
 
-import { type AgAiChatSession, type AgAiHarness, type AgReportState, createAiHarness } from "ag-studio";
+import type { AgReportState } from "ag-studio";
 import { AgStudio, AgStudioProvider } from "ag-studio-react";
 import { useEffect, useRef, useState } from "react";
 
 import { feedback } from "@/lib/feedback";
-import { bundoAdapter, startChart } from "@/lib/studio/adapter";
 import { type BoardId, type Widget, pinToBoard } from "@/lib/studio/boards";
+import { describeChart } from "@/lib/studio/describe";
 import { boardTheme } from "@/lib/studio/theme";
 import { useMoneyModel } from "@/lib/studio/useModel";
 
@@ -30,13 +30,12 @@ function homeFor(w: Widget): BoardId {
   return "home";
 }
 
-/** Ask Bundo for a chart: AG Studio's own AI builds it over BundoPay's data model, as a live preview. Nothing lands
- * on a board until the merchant pins it, so boards stay as clean as they chose. */
+/** Ask Bundo for a chart: one model call picks the chart from BundoPay's own fields, and AG Studio draws it over the
+ * same data model as the boards, as a live preview. Nothing lands on a board until the merchant pins it. */
 export function ChartBuilder() {
   const { model, ready } = useMoneyModel(90);
   const studio = useRef<AgStudio>(null);
-  const harness = useRef<AgAiHarness | null>(null);
-  const session = useRef<AgAiChatSession | null>(null);
+  const abort = useRef<AbortController | null>(null);
   const [q, setQ] = useState("");
   const [asked, setAsked] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "running" | "error">("idle");
@@ -44,41 +43,27 @@ export function ChartBuilder() {
   const [pinned, setPinned] = useState<BoardId | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
-  useEffect(() => () => harness.current?.dispose?.(), []);
+  useEffect(() => () => abort.current?.abort(), []);
 
   async function ask(text: string) {
-    const api = studio.current?.api;
-    if (!text.trim() || !api) return;
-    // Studio builds its harness lazily, when its own AI panel opens; this page has no panel, so build it here.
-    harness.current ??= createAiHarness(api, { adapter: bundoAdapter, primary: "lead" });
+    if (!text.trim() || !ready) return;
+    abort.current?.abort();
+    const ctl = (abort.current = new AbortController());
     setAsked(text);
     setWidget(null);
     setPinned(null);
     setProblem(null);
     setStatus("running");
-    startChart();
-    studio.current?.api?.setState(EMPTY);
     try {
-      session.current ??= await harness.current.createThread({ agentId: harness.current.agents[0]?.id ?? "lead", title: "Charts" });
-      const s = session.current;
-      let ran = false;
-      // The session reports every change; the run is over once it has been running and stops.
-      const onChange = () => {
-        if (s.status === "running") ran = true;
-        if (!ran || s.status === "running") return;
-        s.removeEventListener("changed", onChange);
-        const state = studio.current?.api?.getState();
-        const page = state?.pages.find((p) => p.id === state.selectedPageId) ?? state?.pages[0];
-        const made = Object.values(page?.widgets ?? {}).find(Boolean) ?? null;
-        const last = s.messages.at(-1)?.parts.find((p) => p.type === "error") as { message?: string } | undefined;
-        setProblem(last?.message ?? null);
-        setWidget(made);
-        setStatus(s.status === "error" || !made ? "error" : "idle");
-        feedback(made ? "approved" : "error");
-      };
-      s.addEventListener("changed", onChange);
-      s.sendMessage(`${text}\n\nBuild exactly one widget on the current page that answers this. Keep it simple and readable for a small business owner.`);
+      const made = await describeChart(text, model, ctl.signal);
+      if (ctl.signal.aborted) return;
+      // Show it on a real Studio canvas, so it looks exactly as it will once pinned.
+      studio.current?.api?.setState({ ...EMPTY, pages: [{ ...EMPTY.pages[0], widgets: { chart: made }, widgetLayout: { chart: { xTrack: 0, yTrack: 0, xSpan: 1, ySpan: 8 } } }] });
+      setWidget(made);
+      setStatus("idle");
+      feedback("approved");
     } catch (e) {
+      if (ctl.signal.aborted) return;
       setProblem((e as Error).message);
       setStatus("error");
       feedback("error");

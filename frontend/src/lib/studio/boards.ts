@@ -134,6 +134,21 @@ export function curatedBoard(id: BoardId, columns: Columns, extras: { store: boo
   return state;
 }
 
+/** A saved (four-column) board, re-flowed for a phone: tiles side by side, everything else full width, in the
+ * order the merchant arranged them. Pinned charts and hidden cards carry over. */
+export function forPhone(state: AgReportState): AgReportState {
+  const next = structuredClone(state);
+  for (const p of next.pages) {
+    const order = Object.entries(p.widgetLayout ?? {})
+      .filter((e): e is [string, NonNullable<(typeof e)[1]>] => !!e[1] && !!p.widgets?.[e[0]])
+      .sort(([, a], [, b]) => a.yTrack - b.yTrack || a.xTrack - b.xTrack);
+    const items = order.map(([id, l]) => [id, p.widgets![id]!.type === "value" ? 1 : 4, p.widgets![id]!.type === "value" ? 4 : Math.max(l.ySpan, 7)] as [string, 1 | 4, number]);
+    p.widgetLayout = flow(2, items);
+    if (p.layout) p.layout.columns = 2;
+  }
+  return next;
+}
+
 export function rowsUsed(state: AgReportState): number {
   const page = state.pages.find((p) => p.id === state.selectedPageId) ?? state.pages[0];
   return Math.max(1, ...Object.values(page?.widgetLayout ?? {}).map((l) => (l ? l.yTrack + l.ySpan : 0)));

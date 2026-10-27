@@ -10,6 +10,8 @@ import { LAST_VIEW } from "@/lib/money";
 export default function MoneyPage() {
   const router = useRouter();
   useEffect(() => {
+    // Only from /money itself: a dev reload can remount this page under a Money sub-route.
+    if (window.location.pathname !== "/money") return;
     let view = "jars";
     try {
       view = localStorage.getItem(LAST_VIEW) === "disputes" ? "disputes" : "jars";
