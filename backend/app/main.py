@@ -12,6 +12,7 @@ from app.db import close_pool, connection, open_pool
 from app.deps import close_gateway
 from app.agent.router import router as agent_router
 from app.demo.router import router as demo_router
+from app.signup import router as signup_router
 from app.disputes.router import router as disputes_router
 from app.events import start_listener, stop_listener
 from app.events_router import router as events_router
@@ -101,3 +102,4 @@ app.include_router(agent_router)
 app.include_router(events_router)
 app.include_router(treasury_router)
 app.include_router(demo_router)
+app.include_router(signup_router)
