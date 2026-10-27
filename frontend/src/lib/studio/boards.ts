@@ -98,19 +98,14 @@ const curated: Record<BoardId, (c: Columns) => AgReportState> = {
           dataMapping: { value: [{ id: "money.operating", aggregation: "sum" }] },
           format: { title: { enabled: true, text: "Operating balance" }, caption: { enabled: true, text: "The marker is what it always keeps; everything above is free to spend" }, crossFilter: "none" },
         },
-        byJar: {
-          type: "bar-chart-grouped",
-          dataMapping: { categoryKey: [{ id: "jars.jar" }], valueKey: [{ id: "jars.balance", aggregation: "sum" }] },
-          format: { title: { enabled: true, text: "In each jar" }, crossFilter: "filter" },
-        },
-        recent: {
-          type: "grid",
-          dataMapping: { cols: [{ id: "transfers.when" }, { id: "transfers.jar" }, { id: "transfers.amount" }, { id: "transfers.outcome" }] },
-          sort: [{ field: { id: "transfers.when" }, direction: "desc" }],
-          format: { title: { enabled: true, text: "Recent transfers" } },
+        trend: {
+          type: "column-chart-stacked",
+          dataMapping: { categoryKey: [{ id: "moved.day" }], valueKey: [{ id: "moved.amount", aggregation: "sum" }], legendKey: [{ id: "moved.jar" }] },
+          sort: [{ field: { id: "moved.day" }, direction: "asc" }],
+          format: { title: { enabled: true, text: "Set aside each day, by jar" }, crossFilter: "filter" },
         },
       },
-      flow(c, [["gauge", 4, 4], ["byJar", 2, 7], ["recent", 2, 7]]),
+      flow(c, [["gauge", 4, 4], ["trend", 4, 8]]),
     ),
 
   /** What do I need to fight? */

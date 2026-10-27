@@ -119,9 +119,9 @@ export type CopilotResult = {
 
 export const ROLE_LABELS: Record<Role, string> = {
   operating: "Operating",
-  tax_reserve: "Tax Reserve",
-  dispute_buffer: "Dispute Margin Buffer",
-  ad_spend: "Ad-Spend Wallet",
+  tax_reserve: "Tax",
+  dispute_buffer: "Dispute cover",
+  ad_spend: "Ads",
   other: "Other",
 };
 
