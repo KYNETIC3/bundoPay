@@ -1,15 +1,20 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 
+import { Skeleton } from "@/components/motion";
 import { PlanApproval } from "@/components/treasury";
 import { Button, Icon, Pill, SendButton } from "@/components/ui";
 import { api, json } from "@/lib/api";
 import { money } from "@/lib/format";
 import { agentState } from "@/lib/status";
 import type { PlanItem } from "@/lib/treasury";
+
+// AG Studio only runs in the browser.
+const ChartBuilder = dynamic(() => import("@/components/ChartBuilder").then((m) => m.ChartBuilder), { ssr: false, loading: () => <Skeleton className="h-36" /> });
 
 type Card = {
   dispute_id: string;
@@ -279,8 +284,11 @@ function DisputeCard({ c, decision, onChanged }: { c: Card; decision: boolean; o
 
 export default function AgentPage() {
   return (
-    <Suspense>
-      <AgentConversation />
-    </Suspense>
+    <div className="space-y-6">
+      <Suspense>
+        <AgentConversation />
+      </Suspense>
+      <div className="mx-auto max-w-[820px]"><ChartBuilder /></div>
+    </div>
   );
 }
