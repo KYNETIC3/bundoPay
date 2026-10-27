@@ -30,6 +30,12 @@ TIMELINE_EVENTS = (
 )
 
 
+def _seller_txn(raw: dict[str, Any] | None) -> str | None:
+    """The seller-side PayPal transaction the dispute is about, so store orders can be matched to it."""
+    txns = (raw or {}).get("disputed_transactions") or []
+    return txns[0].get("seller_transaction_id") if txns else None
+
+
 def _summary(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": row["id"],
@@ -42,6 +48,7 @@ def _summary(row: dict[str, Any]) -> dict[str, Any]:
         "currency": row["currency"],
         "due_date": row["due_date"],
         "opened_at": (row["raw_json"] or {}).get("create_time"),
+        "transaction_id": _seller_txn(row["raw_json"]),
         "updated_at": row["updated_at"],
         "cleared": row.get("archived_at") is not None,
     }

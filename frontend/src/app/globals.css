@@ -95,6 +95,6 @@ dialog.sheet[open]::backdrop { animation: fade-in 200ms ease-out; }
 
 /* AG Studio on Insights: give each widget the same breathing room and lift as the app's cards.
    Single-class selectors, as AG Studio's theming guide recommends, scoped to the board. */
-.insights-board .ag-studio-layout-widget-container { box-shadow: var(--shadow-card); padding: 12px 14px; }
-.insights-board .ag-studio-layout-widget-title { font-size: 14px; color: var(--color-ink-2); hyphens: none; }
-.insights-board .ag-studio-layout-widget-caption { font-size: 12px; color: var(--color-muted); hyphens: none; }
+.board .ag-studio-layout-widget-container { box-shadow: var(--shadow-card); padding: 12px 14px; }
+.board .ag-studio-layout-widget-title { font-size: 14px; color: var(--color-ink-2); hyphens: none; }
+.board .ag-studio-layout-widget-caption { font-size: 12px; color: var(--color-muted); hyphens: none; }
