@@ -12,7 +12,7 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 /** What the backend streams from `POST /agent/studio/turn` (one JSON object per SSE `data:` line). */
 type Wire =
   | { type: "text_delta"; text: string }
-  | { type: "tool_call"; id: string; name: string; arguments: string }
+  | { type: "tool_call"; id: string; name: string; arguments: string; thought_signature?: string | null }
   | { type: "done"; usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number } }
   | { type: "error"; message: string };
 
@@ -59,7 +59,8 @@ export const bundoAdapter: AgLlmAdapter = {
             push({ type: "TOOL_CALL_START", toolCallId: w.id, toolCallName: w.name });
             push({ type: "TOOL_CALL_ARGS", toolCallId: w.id, delta: w.arguments });
             push({ type: "TOOL_CALL_END", toolCallId: w.id });
-            output.push({ id: w.id, kind: "output", type: "function_call", callId: w.id, name: w.name, arguments: w.arguments, status: "completed" });
+            // Gemini needs its signature echoed back on the call next turn to keep its reasoning.
+            output.push({ id: w.id, kind: "output", type: "function_call", callId: w.id, name: w.name, arguments: w.arguments, status: "completed", ...(w.thought_signature ? { thought_signature: w.thought_signature } : {}) } as Output);
           } else if (w.type === "done") {
             usage = { inputTokens: w.usage?.inputTokens ?? 0, outputTokens: w.usage?.outputTokens ?? 0, totalTokens: w.usage?.totalTokens };
           } else if (w.type === "error") {
