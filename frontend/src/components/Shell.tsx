@@ -15,20 +15,20 @@ import { Icon } from "./ui";
 const BARE_PATHS = ["/login", "/onboarding", "/onboarding/return"];
 
 const NAV = [
-  { href: "/", label: "Insights", icon: "insights" },
-  { href: "/treasury", label: "Treasury", icon: "account_balance" },
-  { href: "/disputes", label: "Disputes", icon: "gavel" },
+  { href: "/", label: "Home", icon: "home" },
+  { href: "/money", label: "Money", icon: "account_balance_wallet" },
   { href: "/agent", label: "Ask Bundo", icon: "forum" },
   { href: "/settings", label: "Settings", icon: "tune" },
 ];
 
 const TITLES: [string, string, string][] = [
-  ["/treasury", "Treasury", "Your money, set aside automatically, within limits you choose."],
-  ["/disputes/", "", ""],
-  ["/disputes", "Disputes", "Everything PayPal has sent you, newest first."],
+  ["/money/disputes/", "", ""],
+  ["/money/jars", "Money", "Jars set money aside for tax, dispute cover and ads, within limits you choose."],
+  ["/money/disputes", "Money", "Everything PayPal has sent you, and what Bundo is doing about it."],
+  ["/money", "Money", ""],
   ["/agent", "Ask Bundo", ""],
   ["/settings", "Settings", "Your PayPal connection and what Bundo may do on its own."],
-  ["/", "Insights", "Your money and disputes, at a glance."],
+  ["/", "Home", "Your money and disputes, at a glance."],
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -86,12 +86,12 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
   }, []);
   const [, title, subtitle] = TITLES.find(([p]) => (p === "/" ? pathname === "/" : pathname.startsWith(p))) ?? ["", "BundoPay", ""];
   // Dispute pages carry their own heading; the header only offers a way back.
-  const back = pathname === "/treasury/policy"
-    ? { href: "/treasury/policies", label: "Policies" }
+  const back = pathname === "/money/jars/rule"
+    ? { href: "/money/jars/rules", label: "Rules" }
     : pathname.endsWith("/approve")
     ? { href: pathname.slice(0, -"/approve".length), label: "Dispute" }
-    : pathname.startsWith("/disputes/")
-      ? { href: "/disputes", label: "Disputes" }
+    : pathname.startsWith("/money/disputes/")
+      ? { href: "/money/disputes", label: "Disputes" }
       : null;
   const connected = status?.grant_status === "granted";
 
@@ -125,45 +125,28 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
   }
 
   return (
-    <div className="min-h-screen pt-14 md:pl-[240px] md:pt-0">
-      <aside className="fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-2 border-b border-ink/[0.06] bg-white/60 px-3 backdrop-blur-xl md:inset-y-0 md:left-0 md:right-auto md:h-full md:w-[240px] md:flex-col md:items-stretch md:gap-8 md:border-b-0 md:border-r md:px-4 md:py-7">
+    <div className="min-h-screen pb-20 pt-14 md:pb-0 md:pl-[240px] md:pt-0">
+      <aside className="fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-2 border-b border-ink/[0.06] bg-white/70 px-4 backdrop-blur-xl md:inset-y-0 md:left-0 md:right-auto md:h-full md:w-[240px] md:flex-col md:items-stretch md:gap-8 md:border-b-0 md:border-r md:px-4 md:py-7">
         <div className="flex items-center gap-3 md:px-3">
           <span className="grid h-8 w-8 place-items-center rounded-[9px] bg-ink text-[15px] font-bold text-white">B</span>
-          <span className="hidden text-[17px] font-semibold tracking-[-0.01em] sm:inline">BundoPay</span>
+          <span className="text-[17px] font-semibold tracking-[-0.01em]">BundoPay</span>
         </div>
-        <nav aria-label="Main" className="ml-auto flex gap-1 md:ml-0 md:flex-col">
-          {NAV.map((n) => {
-            const active = n.href === "/" ? pathname === "/" : pathname.startsWith(n.href);
-            return (
-              <Link
-                key={n.href}
-                href={n.href}
-                aria-current={active ? "page" : undefined}
-                aria-label={n.label}
-                className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-[15px] transition ${
-                  active ? "bg-card font-semibold text-ink shadow-[0_1px_2px_rgb(54_33_62/0.06),0_0_0_1px_rgb(54_33_62/0.04)]" : "font-medium text-muted hover:bg-primary/[0.06] hover:text-ink"
-                }`}
-              >
-                <Icon name={n.icon} />
-                <span className="hidden md:inline">{n.label}</span>
-                {n.href === "/agent" && unread > 0 && (
-                  <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-ink px-1.5 text-[11px] font-semibold tabular-nums text-white" aria-label={`${unread} new`}>
-                    {unread}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
+        {/* Phones: the tabs live in the bottom bar, within reach of a thumb. */}
+        <nav aria-label="Main" className="hidden gap-1 md:flex md:flex-col">
+          {NAV.map((n) => <NavLink key={n.href} n={n} pathname={pathname} unread={unread} />)}
         </nav>
         <button
           onClick={() => supabase().auth.signOut()}
           aria-label="Log out"
-          className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-[15px] font-medium text-muted hover:bg-primary/[0.06] hover:text-ink md:mt-auto"
+          className="ml-auto flex min-h-11 items-center gap-3 rounded-xl px-3 text-[15px] font-medium text-muted hover:bg-primary/[0.06] hover:text-ink md:ml-0 md:mt-auto"
         >
           <Icon name="logout" />
           <span className="hidden md:inline">Log out</span>
         </button>
       </aside>
+      <nav aria-label="Main" className="safe-bottom fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-ink/[0.06] bg-white/85 px-2 pt-1.5 backdrop-blur-xl md:hidden">
+        {NAV.map((n) => <NavLink key={n.href} n={n} pathname={pathname} unread={unread} compact />)}
+      </nav>
 
       <main className="mx-auto w-full max-w-[1256px] space-y-8 px-4 pb-16 pt-6 md:px-12 md:pt-10">
         <header className="flex flex-wrap items-end justify-between gap-4">
@@ -184,10 +167,10 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
               <button
                 onClick={sync}
                 disabled={syncing}
-                className="inline-flex min-h-10 items-center gap-2 rounded-full bg-card px-[18px] text-sm font-semibold text-ink ring-1 ring-ink/[0.12] hover:bg-[#f7fafb] disabled:opacity-60"
+                aria-label="Refresh from PayPal" className="press inline-flex min-h-10 items-center gap-2 rounded-full bg-card px-3 sm:px-[18px] text-sm font-semibold text-ink ring-1 ring-ink/[0.12] hover:bg-[#f7fafb] disabled:opacity-60"
               >
                 <Icon name="refresh" className={`text-[18px] ${syncing ? "animate-spin" : ""}`} />
-                {syncing ? "Refreshing" : "Refresh"}
+                <span className="hidden sm:inline">{syncing ? "Refreshing" : "Refresh"}</span>
               </button>
             )}
           </div>
@@ -214,6 +197,39 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
         {status && !connected && pathname !== "/settings" ? <ConnectPrompt /> : children}
       </main>
     </div>
+  );
+}
+
+function NavLink({ n, pathname, unread, compact = false }: { n: (typeof NAV)[number]; pathname: string; unread: number; compact?: boolean }) {
+  const active = n.href === "/" ? pathname === "/" : pathname.startsWith(n.href);
+  const badge = n.href === "/agent" && unread > 0 && (
+    <span className={`grid h-5 min-w-5 place-items-center rounded-full bg-ink px-1.5 text-[11px] font-semibold tabular-nums text-white ${compact ? "absolute -top-1 left-1/2 ml-2" : "ml-auto"}`} aria-label={`${unread} new`}>
+      {unread}
+    </span>
+  );
+  if (compact) {
+    return (
+      <Link href={n.href} aria-current={active ? "page" : undefined} className={`press relative flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] transition ${active ? "font-semibold text-ink" : "font-medium text-muted"}`}>
+        <span className={`grid h-7 w-12 place-items-center rounded-full transition-colors duration-200 ${active ? "bg-primary-fixed text-primary" : ""}`}>
+          <Icon name={n.icon} className={active ? "[font-variation-settings:'FILL'_1,'wght'_400]" : ""} />
+        </span>
+        {n.label}
+        {badge}
+      </Link>
+    );
+  }
+  return (
+    <Link
+      href={n.href}
+      aria-current={active ? "page" : undefined}
+      className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-[15px] transition ${
+        active ? "bg-card font-semibold text-ink shadow-[0_1px_2px_rgb(54_33_62/0.06),0_0_0_1px_rgb(54_33_62/0.04)]" : "font-medium text-muted hover:bg-primary/[0.06] hover:text-ink"
+      }`}
+    >
+      <Icon name={n.icon} />
+      <span>{n.label}</span>
+      {badge}
+    </Link>
   );
 }
 

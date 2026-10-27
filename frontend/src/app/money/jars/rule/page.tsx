@@ -120,7 +120,7 @@ function Editor() {
     setSim(null);
     changed();
     await reload();
-    if (!policy) router.replace(`/treasury/policy?id=${r.policy_id}`);
+    if (!policy) router.replace(`/money/jars/rule?id=${r.policy_id}`);
   }
 
   async function simulate() {

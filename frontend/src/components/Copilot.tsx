@@ -127,7 +127,7 @@ function Copilot({ currency, onChanged }: { currency: string; onChanged: () => v
                 result.limit_suggestions.solo_limit && `auto-running up to ${money(result.limit_suggestions.solo_limit, currency)}`,
               ].filter(Boolean).join(" and ")}
               . Those are account limits, so the copilot can&rsquo;t set them. Check them in{" "}
-              <Link href="/treasury/setup" className="font-semibold text-primary">Accounts</Link>.
+              <Link href="/money/jars/accounts" className="font-semibold text-primary">Accounts</Link>.
             </p>
           )}
 

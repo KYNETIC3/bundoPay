@@ -34,7 +34,7 @@ export default function TreasuryPage() {
         <Empty icon="account_balance" title="Set up your treasury accounts">
           Add the account your business runs on, then the reserves money is set aside into. Nothing moves until you&rsquo;ve
           confirmed each one.
-          <div className="mt-5"><Button variant="primary" href="/treasury/setup">Add accounts</Button></div>
+          <div className="mt-5"><Button variant="primary" href="/money/jars/accounts">Add accounts</Button></div>
         </Empty>
       </Card>
     );
@@ -47,7 +47,7 @@ export default function TreasuryPage() {
           <p className="flex flex-wrap items-center gap-3 text-sm text-ink-2">
             <Icon name="info" className="text-[18px] text-muted" />
             <span>There&rsquo;s nowhere to move money into yet. Add and verify a reserve account (Tax, Dispute buffer or Ad spend).</span>
-            <Button variant="primary" href="/treasury/setup" className="min-h-9 px-3.5 text-[13px]">Add a reserve</Button>
+            <Button variant="primary" href="/money/jars/accounts" className="min-h-9 px-3.5 text-[13px]">Add a reserve</Button>
           </p>
         </Card>
       )}
@@ -98,7 +98,7 @@ export default function TreasuryPage() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
         <div className="flex flex-col gap-6">
-        <Link href="/treasury/policies" className="group rounded-[20px] bg-card p-7 shadow-card transition hover:shadow-lift">
+        <Link href="/money/jars/rules" className="group rounded-[20px] bg-card p-7 shadow-card transition hover:shadow-lift">
           <div className="flex items-center justify-between">
             <span className="grid h-10 w-10 place-items-center rounded-xl bg-primary-fixed text-primary"><Icon name="rule" /></span>
             <Icon name="chevron_right" className="text-muted transition group-hover:translate-x-0.5 group-hover:text-ink" />
@@ -111,7 +111,7 @@ export default function TreasuryPage() {
           </p>
         </Link>
 
-        <Link href="/treasury/setup" className="group flex-1 rounded-[20px] bg-card p-7 shadow-card transition hover:shadow-lift">
+        <Link href="/money/jars/accounts" className="group flex-1 rounded-[20px] bg-card p-7 shadow-card transition hover:shadow-lift">
           <div className="flex items-center justify-between">
             <span className="grid h-10 w-10 place-items-center rounded-xl bg-primary-fixed text-primary"><Icon name="shield" /></span>
             <Icon name="chevron_right" className="text-muted transition group-hover:translate-x-0.5 group-hover:text-ink" />
@@ -128,7 +128,7 @@ export default function TreasuryPage() {
         <Card className="lg:self-start">
           <div className="mb-5 flex items-center justify-between gap-4">
             <h2 className="text-[19px] font-semibold tracking-[-0.015em]">Recent activity</h2>
-            <Link href="/treasury/activity" className="inline-flex items-center text-sm font-medium text-primary hover:text-ink">
+            <Link href="/money/jars/activity" className="inline-flex items-center text-sm font-medium text-primary hover:text-ink">
               See all <Icon name="chevron_right" className="text-[18px]" />
             </Link>
           </div>

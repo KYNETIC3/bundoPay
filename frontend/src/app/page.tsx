@@ -45,7 +45,7 @@ export default function InsightsPage() {
           <Empty icon="account_balance" title="Set up your treasury accounts">
             Add the account your business runs on and the reserves money is set aside into, and this page splits your
             balance by what it&rsquo;s for.
-            <div className="mt-5"><Button variant="primary" href="/treasury/setup">Add accounts</Button></div>
+            <div className="mt-5"><Button variant="primary" href="/money/jars/accounts">Add accounts</Button></div>
           </Empty>
         </Card>
       ) : (
@@ -53,7 +53,7 @@ export default function InsightsPage() {
           positions={t.positions}
           floor={t.limits.liquidity_floor}
           currency={currency}
-          actions={<Button variant="ghost" href="/treasury" className="min-h-9 text-[13px]">Treasury <Icon name="chevron_right" className="text-[16px]" /></Button>}
+          actions={<Button variant="ghost" href="/money/jars" className="min-h-9 text-[13px]">Treasury <Icon name="chevron_right" className="text-[16px]" /></Button>}
         />
       )}
 
@@ -61,9 +61,9 @@ export default function InsightsPage() {
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[19px] font-semibold tracking-[-0.015em]">
           <span className="h-2 w-2 rounded-full bg-primary" aria-hidden />
           Needs you:
-          {transfersWaiting > 0 && <Link href="/treasury" className="text-primary underline-offset-4 hover:underline">{transfersWaiting} {transfersWaiting === 1 ? "transfer" : "transfers"} to OK</Link>}
+          {transfersWaiting > 0 && <Link href="/money/jars" className="text-primary underline-offset-4 hover:underline">{transfersWaiting} {transfersWaiting === 1 ? "transfer" : "transfers"} to OK</Link>}
           {transfersWaiting > 0 && disputesWaiting > 0 && <span className="text-muted">·</span>}
-          {disputesWaiting > 0 && <Link href="/disputes" className="text-primary underline-offset-4 hover:underline">{disputesWaiting} {disputesWaiting === 1 ? "dispute" : "disputes"} to answer</Link>}
+          {disputesWaiting > 0 && <Link href="/money/disputes" className="text-primary underline-offset-4 hover:underline">{disputesWaiting} {disputesWaiting === 1 ? "dispute" : "disputes"} to answer</Link>}
         </p>
       ) : (
         <p className="flex items-center gap-2 text-[15px] text-muted">

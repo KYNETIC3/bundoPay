@@ -74,7 +74,7 @@ function NewPolicy({ kinds }: { kinds: PolicyKind[] }) {
             <Link
               key={k}
               role="menuitem"
-              href={`/treasury/policy?kind=${k}`}
+              href={`/money/jars/rule?kind=${k}`}
               className="flex items-start gap-3 rounded-xl px-3 py-3 hover:bg-soft focus:bg-soft focus:outline-none"
             >
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary-fixed text-primary"><Icon name={KIND_LABELS[k].icon} className="text-[18px]" /></span>
@@ -98,7 +98,7 @@ function PolicyRow({ p, currency, onChanged }: { p: Policy; currency: string; on
   const doc = live?.doc ?? last?.doc;
   const k = KIND_LABELS[p.kind];
   const state = policyState(p);
-  const href = `/treasury/policy?id=${p.id}`;
+  const href = `/money/jars/rule?id=${p.id}`;
 
   async function act(action: "pause" | "resume" | "run") {
     setBusy(action);

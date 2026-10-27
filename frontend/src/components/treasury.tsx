@@ -109,7 +109,7 @@ export function TreasuryHero({ positions: unordered, floor, currency, actions }:
           <Icon name="info" className="mt-px shrink-0 text-[18px] text-muted" />
           <span>
             PayPal&rsquo;s sandbox didn&rsquo;t share Operating&rsquo;s balance, so nothing can move yet. To test anyway, set how much
-            BundoPay may use under <Link href="/treasury/setup" className="font-semibold underline">Accounts &rarr; Safety limits</Link>.
+            BundoPay may use under <Link href="/money/jars/accounts" className="font-semibold underline">Accounts &rarr; Safety limits</Link>.
           </span>
         </p>
       )}

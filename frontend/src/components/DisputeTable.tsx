@@ -58,7 +58,7 @@ const columns: ColDef<DisputeSummary>[] = [
     cellRenderer: ({ data: d }: Cell) =>
       d && (
         <div className="flex h-full flex-col justify-center leading-tight">
-          <Link href={`/disputes/${d.id}`} className="font-semibold text-ink hover:text-primary">{d.reason_label ?? "Dispute"}</Link>
+          <Link href={`/money/disputes/${d.id}`} className="font-semibold text-ink hover:text-primary">{d.reason_label ?? "Dispute"}</Link>
           <span className="mt-1 text-xs text-muted">{d.paypal_dispute_id}</span>
         </div>
       ),
@@ -136,9 +136,9 @@ const columns: ColDef<DisputeSummary>[] = [
             </Button>
           ) : null}
           {ready ? (
-            <Button variant="primary" href={`/disputes/${d.id}/approve`} className="min-h-8 px-3.5 text-[13px]">Review</Button>
+            <Button variant="primary" href={`/money/disputes/${d.id}/approve`} className="min-h-8 px-3.5 text-[13px]">Review</Button>
           ) : (
-            <Button href={`/disputes/${d.id}`} className="min-h-8 px-3.5 text-[13px]">Open</Button>
+            <Button href={`/money/disputes/${d.id}`} className="min-h-8 px-3.5 text-[13px]">Open</Button>
           )}
         </div>
       );

@@ -238,7 +238,7 @@ function DisputeCard({ c, decision, onChanged }: { c: Card; decision: boolean; o
     <div className="rounded-[14px] bg-card px-4 py-3 ring-1 ring-ink/[0.12]">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <Link href={`/disputes/${c.dispute_id}`} className="block truncate text-sm font-semibold text-ink hover:text-primary">{c.reason}</Link>
+          <Link href={`/money/disputes/${c.dispute_id}`} className="block truncate text-sm font-semibold text-ink hover:text-primary">{c.reason}</Link>
           <div className="mt-1.5 flex items-center gap-2">
             <span className="text-[13px] font-semibold tabular-nums">{money(c.amount, c.currency)}</span>
             <Pill tone={c.archived ? "soft" : a.tone}>{c.archived ? "Cleared" : a.label}</Pill>
@@ -250,7 +250,7 @@ function DisputeCard({ c, decision, onChanged }: { c: Card; decision: boolean; o
           </Button>
         )}
         {!awaiting && !finished && (
-          <Button href={`/disputes/${c.dispute_id}`} className="min-h-8 shrink-0 px-3.5 text-[13px]">Open</Button>
+          <Button href={`/money/disputes/${c.dispute_id}`} className="min-h-8 shrink-0 px-3.5 text-[13px]">Open</Button>
         )}
       </div>
       {awaiting && c.draft_id && c.payload_hash && (
@@ -267,7 +267,7 @@ function DisputeCard({ c, decision, onChanged }: { c: Card; decision: boolean; o
               </Button>
             </>
           ) : null}
-          <Button variant="ghost" href={`/disputes/${c.dispute_id}/approve`} className="min-h-8 text-[13px]">
+          <Button variant="ghost" href={`/money/disputes/${c.dispute_id}/approve`} className="min-h-8 text-[13px]">
             Details &amp; edit
           </Button>
         </div>

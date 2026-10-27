@@ -41,7 +41,7 @@ export default function ApprovePage() {
         <h2 className="mt-5 text-2xl font-semibold tracking-[-0.02em]">Sent to PayPal</h2>
         <p className="mt-2 text-[15px] text-muted">PayPal now shows this dispute as</p>
         <div className="mt-3"><Pill tone={after.tone}>{after.label}</Pill></div>
-        <Button href={`/disputes/${id}`} className="mt-6">Back to dispute</Button>
+        <Button href={`/money/disputes/${id}`} className="mt-6">Back to dispute</Button>
       </Card>
     );
   }
@@ -52,7 +52,7 @@ export default function ApprovePage() {
     return (
       <Card className="mx-auto max-w-[720px] px-8 py-14 text-center">
         <p className="text-muted">Nothing is waiting for your approval on this dispute.</p>
-        <Button href={`/disputes/${id}`} className="mt-4">Back to dispute</Button>
+        <Button href={`/money/disputes/${id}`} className="mt-4">Back to dispute</Button>
       </Card>
     );
 
