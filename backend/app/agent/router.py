@@ -20,7 +20,7 @@ from .messages import post as post_message
 from .orchestrator import default_llm
 from .paypal_actions import ActionDecision, approve_action, decline_action, load_actions
 from .paypal_toolkit import toolkit_enabled_for
-from .studio import MAX_BODY_BYTES, StudioTurnBody, build_config, build_contents, stream_turn, studio_llm, thinking_level
+from .studio import MAX_BODY_BYTES, StudioTurnBody, build_config, build_contents, stream_turn, studio_fallback_llm, studio_llm, thinking_level
 
 router = APIRouter()
 
@@ -271,7 +271,7 @@ async def studio_turn(request: Request, merchant: CurrentMerchant = Depends(char
     if llm is None:
         raise HTTPException(503, {"code": "no_model", "message": "Chart building needs GEMINI_API_KEY in backend/.env."})
     return StreamingResponse(
-        stream_turn(llm, contents, config),
+        stream_turn(llm, contents, config, studio_fallback_llm()),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
