@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useLive } from "@/lib/hooks";
 
@@ -60,6 +60,9 @@ export function useGuideOpen(isDemo: boolean): boolean | null {
 export function StartHere() {
   const { data } = useLive<{ steps: Record<StepId, boolean> }>("/demo/progress", 15_000);
   const [manual, setManual] = useState<StepId[]>([]);
+  const [said, setSaid] = useState("");
+  const list = useRef<HTMLOListElement>(null);
+  const moved = useRef(false);
   useEffect(() => {
     try {
       setManual(JSON.parse(read(MANUAL) ?? "[]"));
@@ -71,9 +74,29 @@ export function StartHere() {
   const done = (id: StepId) => !!data?.steps[id] || manual.includes(id);
   const current = STEPS.find((s) => !done(s.id));
 
+  // The close button goes with the card, so focus lands on the page title rather than nowhere.
+  function hide() {
+    const title = document.querySelector<HTMLElement>("main h1");
+    write(DISMISSED, "1");
+    if (title) {
+      title.tabIndex = -1;
+      title.focus();
+    }
+  }
+
+  // "I did this" unmounts the button that had focus, so focus moves on to the next step's link.
+  useEffect(() => {
+    if (!moved.current) return;
+    moved.current = false;
+    list.current?.querySelector<HTMLElement>('[aria-current="step"] a')?.focus();
+  }, [manual]);
+
   function tick(id: StepId) {
     const next = [...manual, id];
+    const after = STEPS.find((s) => !next.includes(s.id) && !data?.steps[s.id]);
+    moved.current = true;
     setManual(next);
+    setSaid(after ? `Marked done. Next: ${after.title}.` : "Marked done. That was the last step.");
     write(MANUAL, JSON.stringify(next));
   }
 
@@ -84,9 +107,9 @@ export function StartHere() {
           <h2 id="start-here" className="text-[19px] font-semibold tracking-[-0.015em]">Start here</h2>
           <p className="mt-1 text-sm text-muted">One sale, one dispute, about three minutes.</p>
         </div>
-        <IconButton icon="close" label="Hide guide" onClick={() => write(DISMISSED, "1")} />
+        <IconButton icon="close" label="Hide guide" onClick={hide} />
       </div>
-      <ol aria-labelledby="start-here" className="space-y-2">
+      <ol ref={list} aria-labelledby="start-here" className="space-y-2">
         {STEPS.map((s, i) => {
           const isDone = done(s.id);
           const isCurrent = s === current;
@@ -135,6 +158,7 @@ export function StartHere() {
           );
         })}
       </ol>
+      <p aria-live="polite" className="sr-only">{said}</p>
       {!current && (
         <p className="mt-4 text-sm text-ink-2" role="status">
           That&rsquo;s the whole story. <Link href="/money" className="font-semibold text-primary">Look around Money</Link> or hide this guide.

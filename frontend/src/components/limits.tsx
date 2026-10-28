@@ -22,8 +22,8 @@ export function LimitsSummary({ limits, onSaved }: { limits: Limits; onSaved: ()
         <span className="min-w-0 flex-1">
           <span className="block font-semibold">Safety limits</span>
           <span className="mt-0.5 block text-sm text-muted">
-            Always keeps <b className="font-semibold text-ink-2 tabular-nums">{money(limits.liquidity_floor, c)}</b> in Operating; moves up to{" "}
-            <b className="font-semibold text-ink-2 tabular-nums">{money(limits.solo_limit, c)}</b> without asking you.
+            Keeps at least <b className="font-semibold text-ink-2 tabular-nums">{money(limits.liquidity_floor, c)}</b> in Operating; asks you to approve anything over{" "}
+            <b className="font-semibold text-ink-2 tabular-nums">{money(limits.solo_limit, c)}</b>.
           </span>
         </span>
         <Icon name="chevron_right" className="text-muted transition group-hover:translate-x-0.5 group-hover:text-ink" />
@@ -57,7 +57,7 @@ export function LimitsForm({ limits, onSaved }: { limits: Limits; onSaved: () =>
     const bad = (["liquidity_floor", "solo_limit", "hard_cap_per_run", "hard_cap_per_week", "hard_cap_per_day", "hard_cap_per_month", "movable_when_unknown"] as const)
       .find((k) => form[k] !== null && form[k] !== "" && !/^\d+(\.\d{1,2})?$/.test(String(form[k])));
     if (bad) return setNote("Use plain numbers with up to 2 decimals, like 1500 or 1500.50.");
-    if (Number(form.solo_limit) > Number(form.hard_cap_per_run)) return setNote("“Move without asking up to” can't be more than the per-run cap.");
+    if (Number(form.solo_limit) > Number(form.hard_cap_per_run)) return setNote("“Approve anything over” can't be more than the per-run cap.");
     setBusy(true);
     setNote(null);
     try {
