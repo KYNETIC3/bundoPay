@@ -317,3 +317,102 @@ def test_tool_schemas_are_sanitised_for_gemini():
     body = studio.StudioTurnBody.model_validate(_turn(tools=[tool]))
     config = studio.build_config(body, "")
     assert "minItems" not in config.tools[0].function_declarations[0].parameters_json_schema["properties"]["kids"]
+
+
+class TurnsModels(FakeModels):
+    """Answers each call with the next scripted turn."""
+
+    def __init__(self, *turns):
+        super().__init__()
+        self.turns = list(turns)
+
+    async def generate_content_stream(self, model, contents, config):
+        self.chunks = self.turns.pop(0)
+        return await super().generate_content_stream(model, contents, config)
+
+
+MALFORMED = [_chunk(finish="MALFORMED_FUNCTION_CALL")]
+GOOD_CALL = [_chunk(types.Part(function_call=types.FunctionCall(id="fc1", name="add_widget", args={"kind": "bar"})), finish="STOP")]
+
+
+def _with_fallback(monkeypatch, models):
+    main = GeminiLLM("test-key", "gemini-test-main")
+    main._client = type("C", (), {"aio": type("A", (), {"models": models})()})()
+    monkeypatch.setattr(agent_router, "studio_fallback_llm", lambda: main)
+
+
+def test_malformed_tool_call_is_retried_with_more_thinking_before_anything_streams(client, monkeypatch):
+    models = _gemini(monkeypatch, TurnsModels(MALFORMED, GOOD_CALL))
+    events = _events(client.post("/agent/studio/turn", json=_turn()))
+    assert [e["type"] for e in events] == ["tool_call", "done"]
+    assert events[-1]["finish_reason"] == "stop"
+    assert [c["model"] for c in models.calls] == ["gemini-test-lite", "gemini-test-lite"]
+    assert models.calls[1]["config"].thinking_config.thinking_level == "LOW"
+
+
+def test_second_malformed_call_falls_back_to_the_main_model(client, monkeypatch):
+    lite = _gemini(monkeypatch, TurnsModels(MALFORMED, MALFORMED))
+    main = TurnsModels(GOOD_CALL)
+    _with_fallback(monkeypatch, main)
+    events = _events(client.post("/agent/studio/turn", json=_turn()))
+    assert [e["type"] for e in events] == ["tool_call", "done"]
+    assert len(lite.calls) == 2 and [c["model"] for c in main.calls] == ["gemini-test-main"]
+
+
+def test_malformed_after_every_retry_is_reported_not_called_other(client, monkeypatch):
+    _gemini(monkeypatch, TurnsModels(MALFORMED, MALFORMED))
+    events = _events(client.post("/agent/studio/turn", json=_turn()))
+    assert events == [{"type": "done", "usage": {"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
+                       "finish_reason": "malformed_function_call", "model": "gemini-test-lite"}]
+
+
+def test_required_tool_call_that_never_comes_is_retried(client, monkeypatch):
+    models = _gemini(monkeypatch, TurnsModels([_chunk(types.Part(text="Sure!"), finish="STOP")], GOOD_CALL))
+    events = _events(client.post("/agent/studio/turn", json=_turn(tool_choice="required")))
+    assert [e["type"] for e in events] == ["tool_call", "done"] and len(models.calls) == 2
+
+
+def test_plain_text_answer_is_not_retried(client, monkeypatch):
+    models = _gemini(monkeypatch, TurnsModels([_chunk(types.Part(text="Done."), finish="STOP")]))
+    events = _events(client.post("/agent/studio/turn", json=_turn()))
+    assert [e["type"] for e in events] == ["text_delta", "done"] and len(models.calls) == 1
+
+
+def test_fallback_is_the_main_model_only_when_it_differs(monkeypatch):
+    _settings(monkeypatch, gemini_api_key="k", gemini_model="main", gemini_fallback_model="lite")
+    assert studio.studio_fallback_llm()._models == ["main"]
+    _settings(monkeypatch, gemini_api_key="k", gemini_model="main", gemini_studio_model="main")
+    assert studio.studio_fallback_llm() is None
+
+
+DELEGATE = {
+    "name": "delegate_to",
+    "parameters": {"type": "object", "required": ["type", "instructions"], "properties": {
+        "type": {"anyOf": [{"$ref": "#/$defs/Agent"}]}, "instructions": {"type": "string"}},
+        "$defs": {"Agent": {"type": "object", "properties": {"id": {"type": "string"}}}}},
+}
+
+
+def _delegate(args):
+    return [_chunk(types.Part(function_call=types.FunctionCall(id="d1", name="delegate_to", args=args)), finish="STOP")]
+
+
+def test_call_with_wrongly_shaped_arguments_is_retried(client, monkeypatch):
+    # Seen live: the lite model sent `"type": "data"` where Studio requires `{"id": "data"}`.
+    models = _gemini(monkeypatch, TurnsModels(_delegate({"type": "data", "instructions": "explore"}),
+                                              _delegate({"type": {"id": "data"}, "instructions": "explore"})))
+    events = _events(client.post("/agent/studio/turn", json=_turn(tools=[DELEGATE])))
+    assert json.loads(events[0]["arguments"])["type"] == {"id": "data"} and len(models.calls) == 2
+
+
+def test_call_missing_a_required_argument_is_retried(client, monkeypatch):
+    models = _gemini(monkeypatch, TurnsModels(_delegate({"instructions": "explore"}),
+                                              _delegate({"type": {"id": "data"}, "instructions": "explore"})))
+    client.post("/agent/studio/turn", json=_turn(tools=[DELEGATE]))
+    assert len(models.calls) == 2
+
+
+def test_well_shaped_call_is_not_retried(client, monkeypatch):
+    models = _gemini(monkeypatch, TurnsModels(_delegate({"type": {"id": "data"}, "instructions": "explore"})))
+    client.post("/agent/studio/turn", json=_turn(tools=[DELEGATE]))
+    assert len(models.calls) == 1
