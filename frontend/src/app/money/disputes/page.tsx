@@ -33,7 +33,7 @@ const tab = (on: boolean) =>
   }`;
 
 export default function DisputesPage() {
-  const { model, overview, disputes, hasStore, ready, currency } = useMoneyModel(90);
+  const { model, overview, disputes, ready, currency } = useMoneyModel(90);
   const { data, error, reload } = disputes;
   const [showCleared, setShowCleared] = useState(false);
   const cleared = useLive<DisputeSummary[]>(showCleared ? "/disputes?cleared=true" : null);
@@ -71,7 +71,7 @@ export default function DisputesPage() {
         </Link>
       )}
 
-      {ready && all.length > 0 && <Board id="disputes" data={model} store={hasStore} />}
+      {ready && all.length > 0 && <Board id="disputes" data={model} />}
 
       <Card>
         <div className="mb-6 flex items-center justify-between gap-2">

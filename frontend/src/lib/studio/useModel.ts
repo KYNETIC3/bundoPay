@@ -11,7 +11,7 @@ import { type StoreKind, type StoreRecords, buildModel } from "./model";
 
 /** Store CSVs the merchant uploaded in Settings. Only kinds with rows are fetched, so a store with no data costs
  * one small request and adds nothing to the boards. */
-function useStoreRecords(): StoreRecords {
+export function useStoreRecords(): StoreRecords {
   const summary = useLive<{ kind: StoreKind; rows: number }[]>("/data/summary", 300_000);
   const [records, setRecords] = useState<StoreRecords>({});
   const kinds = (summary.data ?? []).filter((s) => s.rows > 0).map((s) => s.kind).sort().join(",");

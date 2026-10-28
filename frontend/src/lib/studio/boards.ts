@@ -19,6 +19,13 @@ const value = (title: string, caption: string, table: string, field: string, agg
   format: { title: { enabled: true, text: title, wrapping: true }, caption: { enabled: true, text: caption, wrapping: true }, crossFilter: "none" },
 });
 
+/** A value tile over a calculated field (see `expressions` in model.ts), which carries its own aggregation. */
+const measure = (title: string, caption: string, id: string): Widget => ({
+  type: "value",
+  dataMapping: { value: [{ id }] },
+  format: { title: { enabled: true, text: title, wrapping: true }, caption: { enabled: true, text: caption, wrapping: true }, crossFilter: "none" },
+});
+
 function page(id: BoardId, columns: Columns, widgets: Record<string, Widget>, layout: Record<string, Place>): AgReportState {
   return {
     selectedPageId: id,
@@ -102,36 +109,33 @@ const curated: Record<BoardId, (c: Columns) => AgReportState> = {
       flow(c, [["trend", 4, 8]]),
     ),
 
-  /** What do I need to fight? */
+  /** What's at risk, can I win it, and is enough set aside? Five widgets at most, so it reads at a glance. */
   disputes: (c) =>
     page(
       "disputes",
       c,
       {
-        atStake: value("At stake", "Across open disputes", "disputes", "at_stake"),
-        open: value("Open", "Waiting on you, PayPal or the buyer", "disputes", "open"),
+        exposure: measure("Net exposure", "At stake and not covered by your Dispute cover jar", "net_exposure"),
+        winRate: measure("Win rate", "Of disputes PayPal has closed", "win_rate"),
+        dueSoon: value("Due in 48h", "Open disputes to answer in the next two days", "disputes", "due_soon"),
         reasons: {
           type: "bar-chart-grouped",
           dataMapping: { categoryKey: [{ id: "disputes.reason" }], valueKey: [{ id: "disputes.at_stake", aggregation: "sum" }] },
           format: { title: { enabled: true, text: "At stake, by reason" }, crossFilter: "filter" },
         },
+        proof: {
+          // Stacked by proof strength (named in the legend), so it reads without relying on colour.
+          type: "bar-chart-stacked",
+          dataMapping: { categoryKey: [{ id: "disputes.reason" }], valueKey: [{ id: "disputes.dispute_id", aggregation: "count" }], legendKey: [{ id: "disputes.proof" }] },
+          format: { title: { enabled: true, text: "Evidence coverage, by reason" }, crossFilter: "filter" },
+        },
       },
-      flow(c, [["atStake", 1, 4], ["open", 1, 4], ["reasons", 2, 8]]),
+      flow(c, [["exposure", 1, 4], ["winRate", 1, 4], ["dueSoon", 2, 4], ["reasons", 2, 8], ["proof", 2, 8]]),
     ),
 };
 
-/** The "no tracking number" card only appears once store data is uploaded, so an empty store adds no clutter. */
-export function curatedBoard(id: BoardId, columns: Columns, extras: { store: boolean }): AgReportState {
-  const state = curated[id](columns);
-  if (id === "disputes" && extras.store) {
-    const p = state.pages[0];
-    p.widgets ??= {};
-    p.widgetLayout ??= {};
-    p.widgets.noTracking = value("Open, no tracking number", "Add tracking to answer these faster", "disputes", "no_tracking");
-    const bottom = Math.max(...Object.values(p.widgetLayout).map((l) => (l ? l.yTrack + l.ySpan : 0)));
-    p.widgetLayout.noTracking = { xTrack: 0, yTrack: bottom, xSpan: columns === 4 ? 1 : 2, ySpan: 4 };
-  }
-  return state;
+export function curatedBoard(id: BoardId, columns: Columns): AgReportState {
+  return curated[id](columns);
 }
 
 /** A saved (four-column) board, re-flowed for a phone: tiles side by side, everything else full width, in the
@@ -154,7 +158,8 @@ export function rowsUsed(state: AgReportState): number {
   return Math.max(1, ...Object.values(page?.widgetLayout ?? {}).map((l) => (l ? l.yTrack + l.ySpan : 0)));
 }
 
-const key = (id: BoardId) => `bundo.board.${id}.v2`;
+// v3: the Disputes board gained its hero tiles; older saved layouts would hide them.
+const key = (id: BoardId) => `bundo.board.${id}.v3`;
 
 export function savedBoard(id: BoardId): AgReportState | undefined {
   try {
@@ -175,7 +180,7 @@ export function saveBoard(id: BoardId, state: AgReportState | null) {
 
 /** Add a widget Ask Bundo built to a board, under everything already there. */
 export function pinToBoard(id: BoardId, widget: Widget, columns: Columns = 4) {
-  const state = savedBoard(id) ?? curatedBoard(id, columns, { store: false });
+  const state = savedBoard(id) ?? curatedBoard(id, columns);
   const p = state.pages.find((x) => x.id === state.selectedPageId) ?? state.pages[0];
   p.widgets ??= {};
   p.widgetLayout ??= {};

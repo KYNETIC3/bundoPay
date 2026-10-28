@@ -28,7 +28,7 @@ const needsAnswer = (d: DisputeSummary) =>
 /** Home answers three questions, in order: how much can I spend, does anything need me, and how is it going. */
 export default function HomePage() {
   const [days, setDays] = useState<7 | 30 | 90>(30);
-  const { model, overview, disputes, insights, hasStore, ready, currency } = useMoneyModel(days);
+  const { model, overview, disputes, insights, ready, currency } = useMoneyModel(days);
   const [editing, setEditing] = useState(false);
   const [resetSignal, setResetSignal] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
@@ -134,7 +134,7 @@ export default function HomePage() {
             </Empty>
           </Card>
         ) : (
-          <Board id="home" data={model} store={hasStore} editing={editing} resetSignal={resetSignal} />
+          <Board id="home" data={model} editing={editing} resetSignal={resetSignal} />
         )}
       </section>
 

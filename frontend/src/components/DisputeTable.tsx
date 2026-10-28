@@ -3,10 +3,11 @@
 import { AllCommunityModule, ModuleRegistry, type ColDef, type ICellRendererParams, type PostSortRowsParams } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef } from "react";
 
 import { api } from "@/lib/api";
 import { money } from "@/lib/format";
+import { useNarrow } from "@/lib/hooks";
 import { agentState, disputeStatus } from "@/lib/status";
 import { gridTheme } from "@/lib/studio/theme";
 import type { DisputeSummary } from "@/lib/types";
@@ -210,18 +211,6 @@ function DisputeCards({ items, act }: { items: DisputeSummary[]; act: Ctx["act"]
       })}
     </ul>
   );
-}
-
-function useNarrow() {
-  const [narrow, setNarrow] = useState(false);
-  useEffect(() => {
-    const q = window.matchMedia("(max-width: 639px)");
-    const on = () => setNarrow(q.matches);
-    on();
-    q.addEventListener("change", on);
-    return () => q.removeEventListener("change", on);
-  }, []);
-  return narrow;
 }
 
 export function unresolvedCount(items: DisputeSummary[] | null | undefined): number {

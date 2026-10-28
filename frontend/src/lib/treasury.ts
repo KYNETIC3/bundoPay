@@ -350,19 +350,3 @@ export function movementStatus(m: Movement): string {
   return STATUS_WORDS[m.status] ?? m.status.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 }
 
-/** The statement CSV: one row per movement, oldest last, the way a bank statement reads. */
-export function downloadStatement(movements: Movement[]) {
-  const rows: (string | number)[][] = [["Date", "What happened", "To", "Amount", "Currency", "Status", "Reference"]];
-  for (const m of movements) {
-    rows.push([
-      new Date(m.created_at).toLocaleString(),
-      m.verdict === "block" ? `Stopped: ${CHECK_LABELS[m.check_code ?? ""] ?? "safety check"}` : m.kind === "refund" ? "Refund" : "Transfer between your accounts",
-      m.account_name ?? (m.role ? ROLE_LABELS[m.role] : ""),
-      Number(m.amount).toFixed(2),
-      m.currency,
-      movementStatus(m),
-      reference(m.flow_id),
-    ]);
-  }
-  downloadCsv(`bundopay-jars-statement-${new Date().toISOString().slice(0, 10)}.csv`, rows);
-}

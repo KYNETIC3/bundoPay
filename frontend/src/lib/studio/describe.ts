@@ -2,7 +2,7 @@
 
 import type { AgDataSourcesDefinition } from "ag-studio";
 
-import { bundoAdapter, startChart } from "./adapter";
+import { bundoAdapter } from "./adapter";
 import type { Widget } from "./boards";
 
 /** Ask Bundo for a chart in one model call. The model only picks from BundoPay's own fields and a short list of
@@ -39,7 +39,6 @@ function fieldList(model: AgDataSourcesDefinition) {
 
 export async function describeChart(question: string, model: AgDataSourcesDefinition, signal?: AbortSignal): Promise<Widget> {
   const fields = fieldList(model);
-  startChart();
   const turn = bundoAdapter.executeTurn(
     {
       instructions:
@@ -51,7 +50,8 @@ export async function describeChart(question: string, model: AgDataSourcesDefini
       input: [{ id: "q", kind: "input", type: "message", role: "user", status: "completed", content: [{ type: "text", text: question }] }],
       responseFormat: { type: "json", name: "chart", schema: SCHEMA },
     } as Parameters<typeof bundoAdapter.executeTurn>[0],
-    { signal },
+    // A quick chart is a single turn on its own thread, so it counts once.
+    { signal, trace: { threadId: crypto.randomUUID(), runId: crypto.randomUUID(), agentId: "quick-chart" } },
   );
   const res = await turn.complete;
   if (res.error) throw new Error(res.error.message);

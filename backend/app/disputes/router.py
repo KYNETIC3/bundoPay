@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from pydantic import BaseModel
 
 from app.adapters.csv_adapter import SCHEMAS, CsvValidationError, import_csv
-from app.agent.orchestrator import run_agent
+from app.agent.orchestrator import SELLER_WINS, run_agent
 from app.approvals import service as approvals
 from app.approvals.tokens import ApprovalError
 from app.audit import audit
@@ -36,6 +36,14 @@ def _seller_txn(raw: dict[str, Any] | None) -> str | None:
     return txns[0].get("seller_transaction_id") if txns else None
 
 
+def _result(row: dict[str, Any]) -> str | None:
+    """"won" or "lost" once PayPal closes it, so boards can show a win rate; None while it is still open."""
+    if row["status"] != "RESOLVED":
+        return None
+    code = ((row["raw_json"] or {}).get("dispute_outcome") or {}).get("outcome_code")
+    return "won" if code in SELLER_WINS else "lost" if code else None
+
+
 def _summary(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": row["id"],
@@ -51,6 +59,7 @@ def _summary(row: dict[str, Any]) -> dict[str, Any]:
         "transaction_id": _seller_txn(row["raw_json"]),
         "updated_at": row["updated_at"],
         "cleared": row.get("archived_at") is not None,
+        "result": _result(row),
     }
 
 
@@ -67,10 +76,12 @@ async def inbox(cleared: bool = False, merchant: CurrentMerchant = Depends(curre
     async with connection() as conn:
         cur = await conn.execute(
             """
-            select d.*, dr.id as draft_id, dr.action as draft_action, dr.status as draft_status
+            select d.*, dr.id as draft_id, dr.action as draft_action, dr.status as draft_status, em.coverage_score
             from disputes d
             left join lateral (select id, action, status from drafts where dispute_id = d.id
                                order by created_at desc limit 1) dr on true
+            left join lateral (select coverage_score from evidence_maps where dispute_id = d.id
+                               order by created_at desc limit 1) em on true
             where d.merchant_id = %s and (d.archived_at is not null) = %s
             order by (d.status = 'RESOLVED'), d.due_date asc nulls last, d.updated_at desc
             """,
@@ -78,7 +89,8 @@ async def inbox(cleared: bool = False, merchant: CurrentMerchant = Depends(curre
         )
         return [
             {**_summary(r), "draft_id": r["draft_id"], "draft_action": r["draft_action"], "draft_status": r["draft_status"],
-             "clearable": _clearable(r["status"], r["draft_status"]), "cleared": r["archived_at"] is not None}
+             "clearable": _clearable(r["status"], r["draft_status"]), "cleared": r["archived_at"] is not None,
+             "coverage": float(r["coverage_score"]) if r["coverage_score"] is not None else None}
             for r in await cur.fetchall()
         ]
 

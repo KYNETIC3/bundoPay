@@ -1,20 +1,12 @@
 "use client";
 
-import type { AgLlmAdapter, AgLlmRequest, AgLlmResponse } from "ag-studio";
+import type { AgAiEvent, AgLlmAdapter, AgLlmRequest, AgLlmResponse, AgLlmResponseHandler } from "ag-studio";
 
 import { supabase } from "@/lib/supabase";
 
 type Output = AgLlmResponse["output"][number];
-type StudioEvent = Record<string, unknown> & { type: string };
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-/** One id per chart the merchant asks for. A chart takes many model turns; the backend counts it once against
- * the merchant's AI limit by this id. */
-let chartId: string | null = null;
-export function startChart() {
-  chartId = crypto.randomUUID();
-}
 
 /** What the backend streams from `POST /agent/studio/turn` (one JSON object per SSE `data:` line). */
 type Wire =
@@ -27,11 +19,14 @@ type Wire =
  * which runs it on the same model as Ask Bundo with the keys kept server-side. The route only ever returns widget
  * specs; it has no way to move money or answer disputes. */
 export const bundoAdapter: AgLlmAdapter = {
-  executeTurn(request: AgLlmRequest, options) {
-    const queue: StudioEvent[] = [];
+  executeTurn(request: AgLlmRequest, options): AgLlmResponseHandler {
+    // One chart (or one dashboard) is one conversation thread. It takes many model turns, and the backend counts
+    // it once against the merchant's AI limit by this id, so a whole dashboard costs the same as one chart.
+    const trace = options?.trace ?? { threadId: crypto.randomUUID(), runId: crypto.randomUUID() };
+    const queue: AgAiEvent[] = [];
     let wake: (() => void) | null = null;
     let finished = false;
-    const push = (e: StudioEvent) => {
+    const push = (e: AgAiEvent) => {
       queue.push(e);
       wake?.();
     };
@@ -47,11 +42,12 @@ export const bundoAdapter: AgLlmAdapter = {
       let text = "";
       let started = false;
       let usage: AgLlmResponse["usage"];
+      push({ type: "RUN_STARTED", threadId: trace.threadId, runId: trace.runId });
       try {
         const { data } = await supabase().auth.getSession();
         const res = await fetch(`${BASE}/agent/studio/turn`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "text/event-stream", ...(chartId ? { "X-Bundo-Chart-Id": chartId } : {}), ...(data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {}) },
+          headers: { "Content-Type": "application/json", Accept: "text/event-stream", "X-Bundo-Chart-Id": trace.threadId, ...(data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {}) },
           body: JSON.stringify({ instructions: request.instructions, conversation: request.input, tools: request.tools ?? [], output_format: request.responseFormat, tool_choice: request.toolChoice }),
           signal: options?.signal,
         });
@@ -67,7 +63,9 @@ export const bundoAdapter: AgLlmAdapter = {
             push({ type: "TOOL_CALL_ARGS", toolCallId: w.id, delta: w.arguments });
             push({ type: "TOOL_CALL_END", toolCallId: w.id });
             // Gemini needs its signature echoed back on the call next turn to keep its reasoning.
-            output.push({ id: w.id, kind: "output", type: "function_call", callId: w.id, name: w.name, arguments: w.arguments, status: "completed", ...(w.thought_signature ? { thought_signature: w.thought_signature } : {}) } as Output);
+            const call: Output & { thought_signature?: string } = { id: w.id, kind: "output", type: "function_call", callId: w.id, name: w.name, arguments: w.arguments, status: "completed" };
+            if (w.thought_signature) call.thought_signature = w.thought_signature;
+            output.push(call);
           } else if (w.type === "done") {
             usage = { inputTokens: w.usage?.inputTokens ?? 0, outputTokens: w.usage?.outputTokens ?? 0, totalTokens: w.usage?.totalTokens };
           } else if (w.type === "error") {
@@ -78,6 +76,7 @@ export const bundoAdapter: AgLlmAdapter = {
           push({ type: "TEXT_MESSAGE_END", messageId: msgId });
           output.unshift({ id: msgId, kind: "output", type: "message", role: "assistant", status: "completed", content: [{ type: "text", text, annotations: [] }] });
         }
+        push({ type: "RUN_FINISHED", threadId: trace.threadId, runId: trace.runId });
         return { id, createdAt: Date.now(), output, status: "completed", usage };
       } catch (e) {
         const cancelled = options?.signal?.aborted;
@@ -89,7 +88,7 @@ export const bundoAdapter: AgLlmAdapter = {
     })();
 
     const stream = {
-      async *[Symbol.asyncIterator]() {
+      async *[Symbol.asyncIterator](): AsyncGenerator<AgAiEvent> {
         while (true) {
           if (queue.length) {
             yield queue.shift()!;
@@ -101,7 +100,7 @@ export const bundoAdapter: AgLlmAdapter = {
         }
       },
     };
-    return { stream, complete } as unknown as ReturnType<AgLlmAdapter["executeTurn"]>;
+    return { stream, complete };
   },
 };
 
