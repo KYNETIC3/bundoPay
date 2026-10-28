@@ -34,3 +34,16 @@ export function useLive<T>(path: string | null, intervalMs = 30_000) {
   }, [load, pollMs]);
   return { data, error, reload: load };
 }
+
+/** Phone width (below 640px), where wide grids become card lists. */
+export function useNarrow() {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const q = window.matchMedia("(max-width: 639px)");
+    const on = () => setNarrow(q.matches);
+    on();
+    q.addEventListener("change", on);
+    return () => q.removeEventListener("change", on);
+  }, []);
+  return narrow;
+}

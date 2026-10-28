@@ -19,8 +19,6 @@ const dataTucked = (s: AgReportState): AgReportState => ({ ...s, panels: { ...s.
 export type BoardProps = {
   id: BoardId;
   data: AgDataSourcesDefinition;
-  /** Store data is uploaded, so boards may show the cards that depend on it. */
-  store?: boolean;
   editing?: boolean;
   /** Bumped by the page's Reset; restores the curated layout. */
   resetSignal?: number;
@@ -32,7 +30,7 @@ export type BoardProps = {
 /** The one AG Studio wrapper. Every money screen is a Board over the same data model, so a tile on Home and a
  * tile on Jars look and behave the same. The board is exactly as tall as its widgets, so it sits in the page
  * like any other card. */
-export default function Board({ id, data, store = false, editing = false, resetSignal = 0, state, height }: BoardProps) {
+export default function Board({ id, data, editing = false, resetSignal = 0, state, height }: BoardProps) {
   const studio = useRef<AgStudio>(null);
   // Phones get two columns; the four-column layout is the one merchants customise and save.
   const [columns] = useState<Columns>(() => (typeof window !== "undefined" && window.innerWidth < 640 ? 2 : 4));
@@ -40,7 +38,7 @@ export default function Board({ id, data, store = false, editing = false, resetS
     if (state) return state;
     const saved = savedBoard(id);
     if (saved) return columns === 4 ? saved : forPhone(saved);
-    return curatedBoard(id, columns, { store });
+    return curatedBoard(id, columns);
   });
   const [rows, setRows] = useState(() => rowsUsed(initialState));
 
@@ -58,8 +56,8 @@ export default function Board({ id, data, store = false, editing = false, resetS
     if (resetSignal === appliedReset.current) return;
     appliedReset.current = resetSignal;
     saveBoard(id, null);
-    studio.current?.api?.setState(dataTucked(curatedBoard(id, columns, { store })));
-  }, [resetSignal, columns, id, store]);
+    studio.current?.api?.setState(dataTucked(curatedBoard(id, columns)));
+  }, [resetSignal, columns, id]);
 
   // AG Studio rebuilds its panels on entering edit mode, so the fold is applied as customising starts.
   useEffect(() => {

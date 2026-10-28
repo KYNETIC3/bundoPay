@@ -20,7 +20,7 @@ import type { FeedEntry } from "@/lib/treasury";
 const Board = dynamic(() => import("@/components/Board"), { ssr: false, loading: () => <Skeleton className="h-[520px]" /> });
 
 export default function JarsPage() {
-  const { model, overview, disputes, hasStore, ready } = useMoneyModel(30);
+  const { model, overview, disputes, ready } = useMoneyModel(30);
   const feed = useLive<{ entries: FeedEntry[] }>("/treasury/feed", 15_000);
   // The card unmounts once its plan leaves the list, so its outcome is kept here.
   const [notice, setNotice] = useState<string | null>(null);
@@ -97,7 +97,7 @@ export default function JarsPage() {
         <JarStrip overview={data} disputes={disputes.data ?? []} />
       )}
 
-      {ready && <Board id="jars" data={model} store={hasStore} />}
+      {ready && <Board id="jars" data={model} />}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Link href="/money/jars/rules" className="press group flex items-center gap-4 rounded-[20px] bg-card p-5 shadow-card transition hover:shadow-lift">

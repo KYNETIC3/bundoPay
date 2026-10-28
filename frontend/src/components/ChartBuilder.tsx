@@ -1,17 +1,18 @@
 "use client";
 
-import type { AgReportState } from "ag-studio";
+import { type AgAiPromptStarter, type AgDataSourcesDefinition, type AgReportState, AgStudioAiModule, createAiHarness } from "ag-studio";
 import { AgStudio, AgStudioProvider } from "ag-studio-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { feedback } from "@/lib/feedback";
-import { type BoardId, type Widget, pinToBoard } from "@/lib/studio/boards";
+import { bundoAdapter } from "@/lib/studio/adapter";
+import { type BoardId, GAP, ROW_HEIGHT, type Widget, pinToBoard, saveBoard } from "@/lib/studio/boards";
 import { describeChart } from "@/lib/studio/describe";
 import { boardTheme } from "@/lib/studio/theme";
 import { useMoneyModel } from "@/lib/studio/useModel";
 
 import { SuccessTick } from "./motion";
-import { Button, Icon, SendButton } from "./ui";
+import { Button, Icon, Segmented, SendButton } from "./ui";
 
 const EMPTY: AgReportState = {
   selectedPageId: "preview",
@@ -22,6 +23,31 @@ const STARTERS = ["Disputes by reason this month", "Money set aside each week, b
 
 const BOARD_NAMES: Record<BoardId, string> = { home: "Home", jars: "Jars", disputes: "Disputes" };
 
+type Mode = "quick" | "dashboard";
+const MODES: { href: Mode; label: string }[] = [{ href: "quick", label: "Quick chart" }, { href: "dashboard", label: "Build a dashboard" }];
+
+/** Each starter answers one of the questions a seller with disputes actually asks. */
+const DASHBOARD_STARTERS: AgAiPromptStarter[] = [
+  { label: "Where am I losing disputes?", prompt: "Build a dashboard showing where I'm losing disputes: win rate, lost disputes by reason, and evidence coverage by reason." },
+  { label: "How much money is at risk this week?", prompt: "Build a dashboard of money at risk this week: net exposure, disputes due in 48 hours, and at stake by reason." },
+  { label: "Is my dispute buffer enough?", prompt: "Build a dashboard comparing what's at stake in open disputes with what my Dispute cover jar already covers, by reason." },
+];
+
+/** A blank four-column page laid out like the curated boards, so whatever the assistant builds can become one. */
+const BLANK_DASHBOARD: AgReportState = {
+  selectedPageId: "dashboard",
+  pages: [
+    {
+      id: "dashboard",
+      layout: { columns: 4, rowHeight: ROW_HEIGHT, minWidth: 280, pagePadding: 0, backgroundColor: "transparent", widgetBackgroundColor: "#ffffff", widgetBorderEnabled: false, widgetBorderRadius: 20, widgetPadding: GAP },
+      widgets: {},
+      widgetLayout: {},
+    },
+  ],
+};
+
+const AI_MODULES = [AgStudioAiModule];
+
 /** Which board a chart belongs on, from the data it uses: dispute charts go to Disputes, jar and transfer charts to Jars. */
 function homeFor(w: Widget): BoardId {
   const ids = JSON.stringify(w.dataMapping ?? {});
@@ -30,10 +56,28 @@ function homeFor(w: Widget): BoardId {
   return "home";
 }
 
-/** Ask Bundo for a chart: one model call picks the chart from BundoPay's own fields, and AG Studio draws it over the
- * same data model as the boards, as a live preview. Nothing lands on a board until the merchant pins it. */
+/** Ask Bundo for a chart. "Quick chart" is one question, one chart; "Build a dashboard" opens AG Studio's own AI
+ * assistant, which can lay out several widgets in one go. Both draw over the same data model as the boards. */
 export function ChartBuilder() {
   const { model, ready } = useMoneyModel(90);
+  const [mode, setMode] = useState<Mode>("quick");
+  return (
+    <section aria-label="Make a chart" className="rounded-[20px] bg-card p-5 shadow-card sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Icon name="monitoring" className="text-primary" />
+          <h2 className="font-semibold">Ask for a chart</h2>
+        </div>
+        <Segmented items={MODES} active={mode} label="What to make" onSelect={(m) => setMode(m as Mode)} />
+      </div>
+      {mode === "quick" ? <QuickChart model={model} ready={ready} /> : <DashboardBuilder model={model} ready={ready} />}
+    </section>
+  );
+}
+
+/** One model call picks the chart from BundoPay's own fields, shown as a live preview. Nothing lands on a board
+ * until the merchant pins it. */
+function QuickChart({ model, ready }: { model: AgDataSourcesDefinition; ready: boolean }) {
   const studio = useRef<AgStudio>(null);
   const abort = useRef<AbortController | null>(null);
   const [q, setQ] = useState("");
@@ -80,11 +124,7 @@ export function ChartBuilder() {
   const target = widget ? homeFor(widget) : "home";
 
   return (
-    <section aria-label="Make a chart" className="rounded-[20px] bg-card p-5 shadow-card sm:p-6">
-      <div className="flex items-center gap-2">
-        <Icon name="monitoring" className="text-primary" />
-        <h2 className="font-semibold">Ask for a chart</h2>
-      </div>
+    <>
       <form className="mt-4 flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); ask(q); }}>
         <input
           value={q}
@@ -134,6 +174,62 @@ export function ChartBuilder() {
           {pinned && <p className="flex items-center gap-2 text-sm font-medium text-ink-2"><SuccessTick /> Pinned to {BOARD_NAMES[pinned]}. It&rsquo;s there next time you open it.</p>}
         </div>
       )}
-    </section>
+    </>
+  );
+}
+
+const widgetCount = (s: AgReportState) => Object.values(s.pages.find((p) => p.id === s.selectedPageId)?.widgets ?? {}).filter(Boolean).length;
+
+/** AG Studio's AI assistant, on Bundo's model: the merchant asks a question and it plans and lays out several
+ * widgets. It only edits this canvas; nothing reaches a board until the merchant chooses to keep it. */
+function DashboardBuilder({ model, ready }: { model: AgDataSourcesDefinition; ready: boolean }) {
+  const studio = useRef<AgStudio>(null);
+  const [count, setCount] = useState(0);
+  const [kept, setKept] = useState(false);
+
+  const onStateUpdated = useCallback((e: { state: AgReportState }) => {
+    setCount(widgetCount(e.state));
+    setKept(false);
+  }, []);
+
+  function keep() {
+    const state = studio.current?.api?.getState();
+    if (!state) return;
+    const { panels: _panels, ...board } = state;
+    saveBoard("disputes", board);
+    setKept(true);
+    feedback("moved");
+  }
+
+  return (
+    <>
+      <p className="mt-3 text-sm text-ink-2">Ask a question and Bundo lays out a few charts that answer it. Try one of the suggestions in the assistant.</p>
+      <div className="mt-4 h-[640px] overflow-hidden rounded-2xl ring-1 ring-ink/[0.08]">
+        {ready && (
+          <AgStudioProvider licenseKey={process.env.NEXT_PUBLIC_AG_STUDIO_LICENSE} modules={AI_MODULES}>
+            <AgStudio
+              ref={studio}
+              theme={boardTheme}
+              data={model}
+              initialState={BLANK_DASHBOARD}
+              mode="edit"
+              panels={{ edit: { left: ["ai"], right: [] } }}
+              ai={({ api }) => createAiHarness(api, { adapter: bundoAdapter, promptStarters: DASHBOARD_STARTERS })}
+              onStateUpdated={onStateUpdated}
+              style={{ height: "100%", width: "100%" }}
+            />
+          </AgStudioProvider>
+        )}
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-2" aria-live="polite">
+        {count > 0 && !kept && (
+          <>
+            <p className="text-sm text-ink-2">{count === 1 ? "1 chart" : `${count} charts`} on this dashboard.</p>
+            <Button variant="primary" onClick={keep}><Icon name="push_pin" className="text-[18px]" /> Use as my Disputes board</Button>
+          </>
+        )}
+        {kept && <p className="flex items-center gap-2 text-sm font-medium text-ink-2"><SuccessTick /> Saved as your Disputes board. Reset on that board brings the original back.</p>}
+      </div>
+    </>
   );
 }

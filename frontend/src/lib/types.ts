@@ -16,6 +16,10 @@ export type DisputeSummary = {
   draft_status?: string | null;
   clearable?: boolean;
   cleared?: boolean;
+  /** Set once PayPal closes it: "won" when it went the seller's way. */
+  result?: "won" | "lost" | null;
+  /** How much of the proof PayPal wants Bundo found, 0–1, from the latest evidence check. List view only. */
+  coverage?: number | null;
 };
 
 export type EvidenceRow = {

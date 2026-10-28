@@ -1,12 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { useEffect, useMemo, useState } from "react";
 
-import { Button, Card, CardTitle, Icon, Pill } from "@/components/ui";
+import { DataGrid } from "@/components/DataGrid";
+import { Button, Card, CardTitle, Icon, Pill, type Tone } from "@/components/ui";
 import { api } from "@/lib/api";
 import { feedback, feedbackPrefs, setFeedbackPrefs } from "@/lib/feedback";
-import { FEATURE_COPY, dateTime } from "@/lib/format";
+import { FEATURE_COPY, dateTime, money } from "@/lib/format";
+import { useLive } from "@/lib/hooks";
 import { useMerchant } from "@/lib/merchant";
+import { useStoreRecords } from "@/lib/studio/useModel";
+import type { DisputeSummary } from "@/lib/types";
 
 type Rules = { auto_refund_enabled: boolean; auto_refund_limit: string };
 type DataSummary = { kind: string; rows: number; last_import: string }[];
@@ -310,6 +315,125 @@ function StoreDataCard() {
           );
         })}
       </ul>
+      <Reconciliation />
     </Card>
+  );
+}
+
+/** One line of the store-vs-PayPal match: a store order, or a disputed PayPal payment with no order behind it. */
+type Match = {
+  id: string;
+  order: string | null;
+  txn: string | null;
+  amount: number | null;
+  currency: string;
+  tracking: string | null;
+  disputed: boolean;
+  problem: "no_tracking" | "no_order" | null;
+};
+
+const MATCH_STATUS: Record<NonNullable<Match["problem"]> | "ok", { label: string; tone: Tone; icon: string }> = {
+  no_tracking: { label: "No tracking", tone: "danger", icon: "local_shipping" },
+  no_order: { label: "No order", tone: "danger", icon: "receipt_long" },
+  ok: { label: "Matched", tone: "cerulean", icon: "check_circle" },
+};
+
+function MatchPills({ m }: { m: Match }) {
+  const s = MATCH_STATUS[m.problem ?? "ok"];
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <Pill tone={s.tone}><Icon name={s.icon} className="text-[14px]" />{s.label}</Pill>
+      {m.disputed && <Pill tone="plum"><Icon name="gavel" className="text-[14px]" />In a dispute</Pill>}
+    </span>
+  );
+}
+
+const MATCH_COLUMNS: ColDef<Match>[] = [
+  { headerName: "Order", field: "order", flex: 1, minWidth: 120, valueFormatter: (p) => p.value ?? "—" },
+  { headerName: "PayPal transaction", field: "txn", flex: 1.3, minWidth: 170, valueFormatter: (p) => p.value ?? "—" },
+  { headerName: "Amount", field: "amount", type: "rightAligned", width: 120, valueFormatter: (p) => (p.data && p.value != null ? money(String(p.value), p.data.currency) : "—"), cellClass: "flex items-center justify-end tabular-nums" },
+  { headerName: "Tracking", field: "tracking", flex: 1, minWidth: 140, valueFormatter: (p) => p.value ?? "—" },
+  {
+    headerName: "Status",
+    colId: "status",
+    valueGetter: (p) => (p.data ? MATCH_STATUS[p.data.problem ?? "ok"].label + (p.data.disputed ? ", in a dispute" : "") : ""),
+    flex: 1.4,
+    minWidth: 210,
+    cellRenderer: ({ data }: ICellRendererParams<Match>) => data && <MatchPills m={data} />,
+  },
+];
+
+/** Store orders next to PayPal: which orders lack tracking, and which disputed payments have no order to prove
+ * the sale. Only shown once orders are uploaded, and opens on the problems. */
+function Reconciliation() {
+  const records = useStoreRecords();
+  const disputes = useLive<DisputeSummary[]>("/disputes", 120_000);
+  const [onlyProblems, setOnlyProblems] = useState(true);
+
+  const rows = useMemo(() => {
+    const orders = records.orders ?? [];
+    if (!orders.length) return [];
+    const tracking = new Map((records.shipments ?? []).filter((s) => s.tracking_number).map((s) => [s.order_id, s.tracking_number]));
+    const disputed = new Map((disputes.data ?? []).filter((d) => d.transaction_id).map((d) => [d.transaction_id!, d]));
+    const out: Match[] = orders.map((o) => {
+      const t = o.order_id ? tracking.get(o.order_id) ?? null : null;
+      return {
+        id: `o-${o.order_id}`,
+        order: o.order_id,
+        txn: o.paypal_transaction_id,
+        amount: o.total != null ? Number(o.total) : null,
+        currency: o.currency ?? "USD",
+        tracking: t,
+        disputed: !!o.paypal_transaction_id && disputed.has(o.paypal_transaction_id),
+        problem: t ? null : "no_tracking",
+      };
+    });
+    const known = new Set(orders.map((o) => o.paypal_transaction_id));
+    for (const [txn, d] of disputed) {
+      if (known.has(txn)) continue;
+      out.push({ id: `t-${txn}`, order: null, txn, amount: d.amount != null ? Number(d.amount) : null, currency: d.currency ?? "USD", tracking: null, disputed: true, problem: "no_order" });
+    }
+    return out;
+  }, [records, disputes.data]);
+
+  if (!rows.length) return null;
+  const problems = rows.filter((r) => r.problem).length;
+  const shown = onlyProblems ? rows.filter((r) => r.problem) : rows;
+
+  return (
+    <div className="mt-7 border-t border-ink/[0.06] pt-6">
+      <h3 className="text-[15px] font-semibold">Orders and PayPal, side by side</h3>
+      <p className="mb-4 mt-1 text-sm text-muted">
+        {problems ? `${problems} ${problems === 1 ? "needs" : "need"} a look: an order with no tracking, or a disputed payment with no order.` : "Every order has tracking and every disputed payment has an order."}
+      </p>
+      <DataGrid
+        label="Order matches"
+        rows={shown}
+        columns={MATCH_COLUMNS}
+        getRowId={(m) => m.id}
+        csvName="order-matches"
+        noRowsText="No problems. Turn off Only problems to see every order."
+        toolbar={
+          <button
+            type="button"
+            aria-pressed={onlyProblems}
+            onClick={() => setOnlyProblems((v) => !v)}
+            className={`press inline-flex min-h-10 items-center gap-1.5 rounded-full px-4 text-sm font-semibold ring-1 transition motion-reduce:transition-none ${onlyProblems ? "bg-primary-fixed text-ink ring-primary/30" : "bg-card text-ink-2 ring-ink/[0.12]"}`}
+          >
+            <Icon name={onlyProblems ? "check" : "filter_list"} className="text-[18px]" /> Only problems
+          </button>
+        }
+        card={(m) => (
+          <div>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="truncate font-semibold">{m.order ? `Order ${m.order}` : "No order"}</span>
+              <span className="shrink-0 tabular-nums">{m.amount != null ? money(String(m.amount), m.currency) : "—"}</span>
+            </div>
+            <div className="mt-1 truncate text-[13px] text-muted">{m.txn ?? "No PayPal transaction"}{m.tracking ? ` · ${m.tracking}` : ""}</div>
+            <div className="mt-2"><MatchPills m={m} /></div>
+          </div>
+        )}
+      />
+    </div>
   );
 }

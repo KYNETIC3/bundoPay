@@ -1,14 +1,17 @@
 "use client";
 
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 
-import { Menu } from "@/components/overlay";
-import { Card, Details, Empty, Fact, Icon, Pill, type Tone } from "@/components/ui";
+import { DataGrid } from "@/components/DataGrid";
+import { Card, CardTitle, Details, Empty, Fact, Icon, Pill, type Tone } from "@/components/ui";
 import { api } from "@/lib/api";
 import { ago, clock, dateTime, money } from "@/lib/format";
 import { useLive } from "@/lib/hooks";
-import { type FeedEntry, type Overview, type Said, describeEntry, downloadStatement, flowFacts, flowTitle, reference } from "@/lib/treasury";
+import {
+  CHECK_LABELS, type FeedEntry, type Insights, type Movement, type Overview, ROLE_LABELS, type Said, describeEntry, flowFacts, flowTitle, movementStatus, reference,
+} from "@/lib/treasury";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -31,6 +34,88 @@ const OUTCOME_WORDS: Record<string, string> = {
 };
 
 const DOT: Record<Said["tone"], string> = { good: "bg-primary", wait: "bg-aqua", stop: "bg-danger", quiet: "bg-ink/25" };
+
+/** One ledger line: a movement, with who started it from its flow. */
+type Line = {
+  id: string;
+  when: string;
+  jar: string;
+  amount: number;
+  currency: string;
+  outcome: { label: string; tone: Tone; icon: string };
+  startedBy: string;
+  checkedBy: string;
+  reference: string;
+};
+
+function outcomeOf(m: Pick<Movement, "status" | "verdict"> & { check_code?: string | null }): Line["outcome"] {
+  if (m.verdict === "block" || m.status === "blocked") return { label: `Stopped: ${CHECK_LABELS[m.check_code ?? ""] ?? "safety check"}`, tone: "danger", icon: "block" };
+  if (m.status === "failed") return { label: "Failed", tone: "danger", icon: "error" };
+  if (m.status === "needs_approval" || m.verdict === "ask") return { label: movementStatus(m as Movement), tone: "plum", icon: "hourglass_top" };
+  if (m.status === "succeeded" || m.status === "confirmed") return { label: "Completed", tone: "cerulean", icon: "check_circle" };
+  return { label: movementStatus(m as Movement), tone: "soft", icon: "schedule" };
+}
+
+const LEDGER_COLUMNS: ColDef<Line>[] = [
+  { headerName: "When", field: "when", sort: "desc", width: 170, valueFormatter: (p) => (p.value ? dateTime(p.value) : "") },
+  { headerName: "Jar", field: "jar", flex: 1, minWidth: 120 },
+  { headerName: "Amount", field: "amount", type: "rightAligned", width: 120, valueFormatter: (p) => (p.data ? money(String(p.value), p.data.currency) : ""), cellClass: "flex items-center justify-end tabular-nums font-semibold" },
+  {
+    headerName: "Outcome",
+    colId: "outcome",
+    valueGetter: (p) => p.data?.outcome.label ?? "",
+    flex: 1.4,
+    minWidth: 200,
+    cellRenderer: ({ data }: ICellRendererParams<Line>) => data && <Pill tone={data.outcome.tone}><Icon name={data.outcome.icon} className="text-[14px]" />{data.outcome.label}</Pill>,
+  },
+  { headerName: "Who started it", field: "startedBy", flex: 1, minWidth: 150 },
+  { headerName: "Checked by", field: "checkedBy", flex: 1, minWidth: 160 },
+  { headerName: "Reference", field: "reference", width: 120 },
+];
+
+function LedgerCard({ l }: { l: Line }) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="truncate font-semibold">{l.jar}</span>
+        <span className="shrink-0 font-semibold tabular-nums">{money(String(l.amount), l.currency)}</span>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Pill tone={l.outcome.tone}><Icon name={l.outcome.icon} className="text-[14px]" />{l.outcome.label}</Pill>
+        <span className="text-[13px] text-muted">{dateTime(l.when)} · {l.startedBy}</span>
+      </div>
+    </div>
+  );
+}
+
+/** Every movement in the last 90 days as one sortable ledger. The newest have full detail from the overview;
+ * older ones come from insights, which has no cap. */
+function useLedger(flows: Flow[] | undefined, overview: Overview | null) {
+  const insights = useLive<Insights>("/treasury/insights?days=90", 60_000);
+  return useMemo(() => {
+    const byFlow = new Map((flows ?? []).map((f) => [f.flow_id, f]));
+    const recent = overview?.movements ?? [];
+    const seen = new Set(recent.map((m) => m.id));
+    const older = (insights.data?.movements ?? []).filter((m) => !seen.has(m.id));
+    const lines: Line[] = [...recent, ...older].map((m) => {
+      const full = m as Partial<Movement> & typeof m;
+      const flow = full.flow_id ? byFlow.get(full.flow_id) : undefined;
+      const confirmed = !!full.paypal_ref || m.status === "succeeded" || m.status === "confirmed";
+      return {
+        id: m.id,
+        when: m.created_at,
+        jar: full.account_name ?? (m.role ? ROLE_LABELS[m.role] : "Other"),
+        amount: Number(m.amount),
+        currency: m.currency,
+        outcome: outcomeOf(full),
+        startedBy: flow ? flowTitle(flow.policy, flow.started_by) : m.kind === "refund" ? "Dispute refund" : "Jars rule",
+        checkedBy: confirmed ? "Safety checks, then PayPal" : "Safety checks",
+        reference: reference(full.flow_id),
+      };
+    });
+    return lines;
+  }, [flows, overview, insights.data]);
+}
 
 // Checking the record chain writes an entry of its own, so do it at most once every ten minutes per tab.
 let lastCheck: { at: number; result: Verify } | null = null;
@@ -62,6 +147,7 @@ function ActivityView() {
     api<Timeline>(`/treasury/history/${flowId}`).then(setTimeline).catch((e) => setError((e as Error).message));
   }, [flowId]);
   const flow = data?.flows.find((f) => f.flow_id === flowId);
+  const ledger = useLedger(data?.flows, overview.data);
   const steps = (timeline?.entries ?? []).map((e) => ({ e, said: describeEntry(e, currency) })).filter((x): x is { e: FeedEntry; said: Said } => !!x.said);
 
   return (
@@ -77,7 +163,6 @@ function ActivityView() {
             {check ? "Your records are intact. Nothing has been changed after the fact." : "Checking your records…"}
           </p>
         )}
-        <Menu items={[{ icon: "download", label: "Download statement (CSV)", onSelect: () => overview.data && downloadStatement(overview.data.movements) }]} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
@@ -147,6 +232,19 @@ function ActivityView() {
           )}
         </Card>
       </div>
+
+      <Card>
+        <CardTitle>Ledger</CardTitle>
+        <DataGrid
+          label="Your ledger"
+          rows={ledger}
+          columns={LEDGER_COLUMNS}
+          getRowId={(l) => l.id}
+          card={(l) => <LedgerCard l={l} />}
+          csvName="jars-ledger"
+          empty={<Empty icon="receipt_long" title="No money has moved yet">Transfers between your jars show here once a rule runs.</Empty>}
+        />
+      </Card>
     </div>
   );
 }

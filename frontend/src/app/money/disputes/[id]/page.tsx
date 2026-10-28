@@ -1,14 +1,16 @@
 "use client";
 
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { Countdown } from "@/components/Countdown";
+import { DataGrid } from "@/components/DataGrid";
 import { Button, Card, CardTitle, Icon, Pill } from "@/components/ui";
 import { api, json } from "@/lib/api";
 import { dateTime, humanize, money } from "@/lib/format";
 import { ACTION_VERB, agentState, disputeStatus } from "@/lib/status";
-import type { DisputeDetail } from "@/lib/types";
+import type { DisputeDetail, EvidenceRow } from "@/lib/types";
 
 const EVENT_LABELS: Record<string, string> = {
   "dispute.new_work_item": "PayPal asked for a response",
@@ -22,6 +24,39 @@ const EVENT_LABELS: Record<string, string> = {
   "submit.failed": "PayPal rejected it",
   "dispute.outcome_recorded": "Dispute closed",
 };
+
+type Proof = EvidenceRow & { key: string; found: boolean };
+
+const PROOF_COLUMNS: ColDef<Proof>[] = [
+  { headerName: "Proof needed", colId: "needed", valueGetter: (p) => humanize(p.data?.requested_evidence_type), flex: 1.2, minWidth: 160 },
+  {
+    headerName: "Found",
+    colId: "found",
+    valueGetter: (p) => (p.data ? (p.data.found ? p.data.satisfying_record : `Missing: ${p.data.gap_or_conflict ?? "not found"}`) : ""),
+    flex: 2,
+    minWidth: 220,
+    wrapText: true,
+    autoHeight: true,
+    cellClass: "flex items-center py-2 leading-snug",
+    cellRenderer: ({ data }: ICellRendererParams<Proof>) =>
+      data && (
+        <span className="flex items-start gap-2">
+          <Pill tone={data.found ? "cerulean" : "danger"}><Icon name={data.found ? "check_circle" : "error"} className="text-[14px]" />{data.found ? "Found" : "Missing"}</Pill>
+          <span className="text-ink-2">{data.found ? data.satisfying_record : data.gap_or_conflict ?? "Not found"}</span>
+        </span>
+      ),
+  },
+  { headerName: "Where it came from", colId: "source", valueGetter: (p) => (p.data?.source_system ? humanize(p.data.source_system) : "—"), flex: 1, minWidth: 150 },
+  {
+    headerName: "Match confidence",
+    colId: "confidence",
+    valueGetter: (p) => (p.data ? Math.round(Number(p.data.match_confidence) * 100) : null),
+    valueFormatter: (p) => (p.value == null ? "—" : `${p.value}%`),
+    type: "rightAligned",
+    width: 150,
+    cellClass: "flex items-center justify-end tabular-nums",
+  },
+];
 
 export default function DisputePage() {
   const { id } = useParams<{ id: string }>();
@@ -177,26 +212,34 @@ export default function DisputePage() {
                   <Icon name="expand_more" />
                 </span>
               </summary>
-              <ul className="mt-5 divide-y divide-ink/[0.06]">
-                {d.evidence_map.rows_json.map((r, i) => {
-                  const ok = r.satisfying_record && !r.gap_or_conflict;
-                  return (
-                    <li key={i} className="flex items-start gap-4 py-4 text-sm leading-relaxed first:pt-0">
-                      <Icon name={ok ? "check_circle" : "error"} className={ok ? "text-primary" : "text-coral"} />
+              <div className="mt-5">
+                <DataGrid
+                  label="Proof PayPal asked for"
+                  rows={d.evidence_map.rows_json.map((r, i) => ({ ...r, key: `${i}-${r.requested_evidence_type}`, found: !!r.satisfying_record && !r.gap_or_conflict }))}
+                  columns={PROOF_COLUMNS}
+                  getRowId={(r) => r.key}
+                  card={(r) => (
+                    <div className="flex items-start gap-4 text-sm leading-relaxed">
+                      <Icon name={r.found ? "check_circle" : "error"} className={r.found ? "text-primary" : "text-coral"} />
                       <div>
-                        <div className="font-semibold">{humanize(r.requested_evidence_type)}</div>
+                        <div className="font-semibold"><span className="sr-only">{r.found ? "Found: " : "Missing: "}</span>{humanize(r.requested_evidence_type)}</div>
                         <div className="text-muted">{r.satisfying_record ?? r.gap_or_conflict ?? "Not found"}</div>
                       </div>
+                    </div>
+                  )}
+                  csvName={`evidence-${d.paypal_dispute_id}`}
+                />
+              </div>
+              {d.evidence_map.integrity_flags.some((f) => f.severity === "high") && (
+                <ul className="mt-4 divide-y divide-ink/[0.06]">
+                  {d.evidence_map.integrity_flags.filter((f) => f.severity === "high").map((f, i) => (
+                    <li key={`f${i}`} className="flex items-start gap-4 py-4 text-sm">
+                      <Icon name="warning" className="text-danger" />
+                      <span>{f.detail}</span>
                     </li>
-                  );
-                })}
-                {d.evidence_map.integrity_flags.filter((f) => f.severity === "high").map((f, i) => (
-                  <li key={`f${i}`} className="flex items-start gap-4 py-4 text-sm">
-                    <Icon name="warning" className="text-danger" />
-                    <span>{f.detail}</span>
-                  </li>
-                ))}
-              </ul>
+                  ))}
+                </ul>
+              )}
             </details>
           </Card>
         )}

@@ -113,34 +113,32 @@ export function IconButton({ icon, label, href, tone = "plain", tip = "bottom", 
   );
 }
 
-/** Apple-style segmented control. Each segment is a real link, so tabs keep their own URL and the back button works. */
-export function Segmented({ items, active, label }: { items: { href: string; label: string; badge?: number }[]; active: string; label: string }) {
-  return (
-    <nav aria-label={label}>
-      <div className="flex w-full gap-0.5 rounded-full bg-ink/[0.05] p-1 sm:inline-flex sm:w-auto">
-        {items.map((i) => {
-          const on = i.href === active;
-          return (
-            <Link
-              key={i.href}
-              href={i.href}
-              aria-current={on ? "page" : undefined}
-              className={`inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-[13px] transition sm:flex-none sm:px-4 sm:text-sm ${
-                on ? "bg-card font-semibold text-ink shadow-[0_1px_2px_rgb(54_33_62/0.08),0_0_0_1px_rgb(54_33_62/0.04)]" : "font-medium text-muted hover:text-ink"
-              }`}
-            >
-              {i.label}
-              {!!i.badge && (
-                <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[11px] font-semibold tabular-nums text-white" aria-label={`${i.badge} waiting`}>
-                  {i.badge}
-                </span>
-              )}
-            </Link>
-          );
-        })}
-      </div>
-    </nav>
-  );
+/** Apple-style segmented control. Each segment is a real link, so tabs keep their own URL and the back button
+ * works. With `onSelect` it switches something on the page instead: segments become toggle buttons in a group. */
+export function Segmented({ items, active, label, onSelect }: { items: { href: string; label: string; badge?: number }[]; active: string; label: string; onSelect?: (href: string) => void }) {
+  const segments = items.map((i) => {
+    const on = i.href === active;
+    const cls = `inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-[13px] transition motion-reduce:transition-none sm:flex-none sm:px-4 sm:text-sm ${
+      on ? "bg-card font-semibold text-ink shadow-[0_1px_2px_rgb(54_33_62/0.08),0_0_0_1px_rgb(54_33_62/0.04)]" : "font-medium text-muted hover:text-ink"
+    }`;
+    const body = (
+      <>
+        {i.label}
+        {!!i.badge && (
+          <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[11px] font-semibold tabular-nums text-white" aria-label={`${i.badge} waiting`}>
+            {i.badge}
+          </span>
+        )}
+      </>
+    );
+    return onSelect ? (
+      <button key={i.href} type="button" aria-pressed={on} onClick={() => onSelect(i.href)} className={cls}>{body}</button>
+    ) : (
+      <Link key={i.href} href={i.href} aria-current={on ? "page" : undefined} className={cls}>{body}</Link>
+    );
+  });
+  const track = <div className="flex w-full gap-0.5 rounded-full bg-ink/[0.05] p-1 sm:inline-flex sm:w-auto">{segments}</div>;
+  return onSelect ? <div role="group" aria-label={label}>{track}</div> : <nav aria-label={label}>{track}</nav>;
 }
 
 /** A quiet disclosure for facts most people never need: references, who approved, when. */
