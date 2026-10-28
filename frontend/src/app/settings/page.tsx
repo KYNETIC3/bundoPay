@@ -136,6 +136,15 @@ function PayPalCard() {
               {status.granted_scopes.map((f) => <Pill key={f} tone="cerulean">{FEATURE_COPY[f]?.title ?? f}</Pill>)}
             </dd>
           </dl>
+          {status.test_mode && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink/[0.06] py-4">
+              <p className="text-sm text-muted">Make a sandbox sale as a buyer, then watch BundoPay set the tax aside.</p>
+              <Button href="/store" target="_blank" rel="noopener">
+                Open test store <Icon name="open_in_new" className="text-[18px]" />
+                <span className="sr-only">(opens in a new tab)</span>
+              </Button>
+            </div>
+          )}
           <div className="border-t border-ink/[0.06] pt-4">
             {confirming ? (
               <div className="flex flex-wrap items-center gap-2 text-sm">

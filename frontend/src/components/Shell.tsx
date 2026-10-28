@@ -12,7 +12,9 @@ import { supabase } from "@/lib/supabase";
 
 import { Icon } from "./ui";
 
-const BARE_PATHS = ["/login", "/onboarding", "/onboarding/return"];
+const BARE_PATHS = ["/login", "/onboarding", "/onboarding/return", "/store"];
+// Open without signing in: the test store is where a sandbox *buyer* pays, not the merchant.
+const PUBLIC_PATHS = ["/login", "/store"];
 
 const NAV = [
   { href: "/", label: "Home", icon: "home" },
@@ -51,7 +53,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   const bare = BARE_PATHS.includes(pathname);
   useEffect(() => {
-    if (session === null && pathname !== "/login") router.replace("/login");
+    if (session === null && !PUBLIC_PATHS.includes(pathname)) router.replace("/login");
   }, [session, pathname, router]);
 
   if (session === undefined) return null;
