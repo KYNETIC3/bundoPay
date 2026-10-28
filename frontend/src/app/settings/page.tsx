@@ -4,6 +4,7 @@ import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { useEffect, useMemo, useState } from "react";
 
 import { DataGrid } from "@/components/DataGrid";
+import { showGuide } from "@/components/StartHere";
 import { Button, Card, CardTitle, Icon, Pill, type Tone } from "@/components/ui";
 import { api } from "@/lib/api";
 import { feedback, feedbackPrefs, setFeedbackPrefs } from "@/lib/feedback";
@@ -99,12 +100,13 @@ function DemoCard() {
     <Card>
       <CardTitle>Demo account</CardTitle>
       <p className="text-sm text-muted">
-        Other judges share this login. Reset puts the treasury accounts, limits, chat and history back to the starting
+        Other judges share this login. Reset puts the jars, rules, limits, chat and history back to the starting
         point. It also resets every night. PayPal disputes stay, because they live in the PayPal sandbox.
       </p>
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <Button onClick={reset} disabled={busy}><Icon name="restart_alt" className="text-[18px]" /> Reset demo</Button>
-        {message && <span className="text-sm text-muted">{message}</span>}
+        <Button variant="ghost" onClick={() => { showGuide(); setMessage("The Start here guide is back on Home."); }}>Show guide</Button>
+        {message && <span role="status" className="text-sm text-muted">{message}</span>}
       </div>
     </Card>
   );
@@ -139,6 +141,15 @@ function PayPalCard() {
               {status.granted_scopes.map((f) => <Pill key={f} tone="cerulean">{FEATURE_COPY[f]?.title ?? f}</Pill>)}
             </dd>
           </dl>
+          {status.test_mode && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink/[0.06] py-4">
+              <p className="text-sm text-muted">Make a sandbox sale as a buyer, then watch BundoPay set the tax aside.</p>
+              <Button href="/store" target="_blank" rel="noopener">
+                Open test store <Icon name="open_in_new" className="text-[18px]" />
+                <span className="sr-only">(opens in a new tab)</span>
+              </Button>
+            </div>
+          )}
           <div className="border-t border-ink/[0.06] pt-4">
             {confirming ? (
               <div className="flex flex-wrap items-center gap-2 text-sm">

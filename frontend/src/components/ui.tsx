@@ -36,9 +36,10 @@ export function Pill({ tone = "soft", children }: { tone?: Tone; children: React
   );
 }
 
-type BtnProps = { variant?: "primary" | "secondary" | "ghost"; href?: string; className?: string } & React.ButtonHTMLAttributes<HTMLButtonElement>;
+type BtnProps = { variant?: "primary" | "secondary" | "ghost"; href?: string; target?: string; rel?: string; className?: string } &
+  React.ButtonHTMLAttributes<HTMLButtonElement>;
 
-export function Button({ variant = "secondary", href, className = "", children, ...rest }: BtnProps) {
+export function Button({ variant = "secondary", href, target, rel, className = "", children, ...rest }: BtnProps) {
   const base = "press inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-[18px] text-sm font-semibold transition disabled:opacity-50 disabled:cursor-default";
   const look = {
     primary: "bg-primary text-white hover:bg-primary-container",
@@ -46,7 +47,7 @@ export function Button({ variant = "secondary", href, className = "", children, 
     ghost: "px-2 text-primary hover:text-ink",
   }[variant];
   const cls = `${base} ${look} ${className}`;
-  if (href) return <Link href={href} className={cls}>{children}</Link>;
+  if (href) return <Link href={href} target={target} rel={rel} className={cls}>{children}</Link>;
   return <button className={cls} {...rest}>{children}</button>;
 }
 

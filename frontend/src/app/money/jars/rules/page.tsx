@@ -35,7 +35,7 @@ export default function RulesPage() {
         {data.policies.length === 0 ? (
           <div className="p-7">
             <Empty icon="rule" title="No rules yet">
-              Start with the Tax jar, or describe what you want with Copilot and it will draft the rules for you.
+              Start with the Tax jar, or describe what you want to the Rules helper and it will draft the rules for you.
             </Empty>
           </div>
         ) : (

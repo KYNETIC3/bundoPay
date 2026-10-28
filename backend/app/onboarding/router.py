@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 from app.auth import CurrentMerchant, current_merchant
 from app.config import get_settings
+from app.demo.service import is_demo
 from app.db import connection
 from app.paypal_gateway import THIRD_PARTY_FEATURES
 
@@ -64,7 +65,7 @@ async def status(merchant: CurrentMerchant = Depends(current_merchant)) -> dict:
         )
         row = await cur.fetchone()
     own_id = get_settings().paypal_partner_merchant_id
-    return {**row, "test_mode": bool(own_id) and row["paypal_merchant_id"] == own_id}
+    return {**row, "test_mode": bool(own_id) and row["paypal_merchant_id"] == own_id, "is_demo": is_demo(merchant.email)}
 
 
 @router.post("/disconnect")

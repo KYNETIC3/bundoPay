@@ -14,9 +14,16 @@ _last_reset = 0.0
 
 @router.get("/info")
 async def info() -> dict:
-    """Public: lets the login page say a demo login exists. The password is never served."""
-    email = get_settings().demo_email
-    return {"enabled": bool(email), "email": email or None}
+    """Public: lets the login page say a demo login exists, and whether Gemini is on. The password is never served."""
+    settings = get_settings()
+    return {"enabled": bool(settings.demo_email), "email": settings.demo_email or None, "ai": bool(settings.gemini_api_key)}
+
+
+@router.get("/progress")
+async def progress(merchant: CurrentMerchant = Depends(current_merchant)) -> dict:
+    if not service.is_demo(merchant.email):
+        raise HTTPException(403, "The guide is only for the demo account.")
+    return {"steps": await service.progress(merchant.id)}
 
 
 @router.post("/reset")

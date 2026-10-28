@@ -18,6 +18,8 @@ from .chat import chat
 from .llm import ModelUnavailableError
 from .messages import post as post_message
 from .orchestrator import default_llm
+from .paypal_actions import ActionDecision, approve_action, decline_action, load_actions
+from .paypal_toolkit import toolkit_enabled_for
 from .studio import MAX_BODY_BYTES, StudioTurnBody, build_config, build_contents, stream_turn, studio_llm, thinking_level
 
 router = APIRouter()
@@ -170,8 +172,11 @@ async def agent_messages(merchant: CurrentMerchant = Depends(current_merchant)) 
                 )
                 live = await c3.fetchone()
                 plan = {**meta, "status": live["status"] if live else "missing", "expires_at": live["expires_at"] if live else None}
+            meta = m["meta"] or {}
+            actions = await load_actions(conn, merchant.id, meta.get("paypal_action_ids") or [])
             out.append({"id": m["id"], "role": m["role"], "kind": m["kind"], "content": m["content"],
-                        "created_at": m["created_at"], "unread": m["read_at"] is None, "cards": cards, "plan": plan})
+                        "created_at": m["created_at"], "unread": m["read_at"] is None, "cards": cards, "plan": plan,
+                        "paypal_actions": actions, "live": bool(meta.get("live"))})
     return {"messages": out, "unread": sum(1 for m in out if m["unread"])}
 
 
@@ -223,8 +228,11 @@ async def agent_chat(body: ChatBody, merchant: CurrentMerchant = Depends(llm_rat
             (merchant.id, merchant.id),
         )
         history = [{"role": r["role"], "content": r["content"]} for r in await cur.fetchall()]
+        cur = await conn.execute("select paypal_merchant_id, grant_status from merchants where id = %s", (merchant.id,))
+        m = await cur.fetchone()
+    use_toolkit = bool(m and m["grant_status"] == "granted" and toolkit_enabled_for(m["paypal_merchant_id"]))
     try:
-        reply = await chat(merchant.id, history, llm)
+        reply = await chat(merchant.id, history, llm, use_toolkit=use_toolkit)
     except ModelUnavailableError as exc:
         reply = {"reply": str(exc), "cards": []}
     except RuntimeError as exc:
@@ -232,7 +240,11 @@ async def agent_chat(body: ChatBody, merchant: CurrentMerchant = Depends(llm_rat
     async with connection() as conn:
         await post_message(
             conn, merchant.id, reply["reply"] or "Done.", kind="chat",
-            meta={"dispute_ids": [str(c["dispute_id"]) for c in reply["cards"]]},
+            meta={
+                "dispute_ids": [str(c["dispute_id"]) for c in reply["cards"]],
+                "paypal_action_ids": reply.get("paypal_action_ids", []),
+                "live": reply.get("live", False),
+            },
         )
         await conn.execute("update agent_messages set read_at = now() where merchant_id = %s and read_at is null", (merchant.id,))
     return {"status": "ok"}
@@ -263,3 +275,20 @@ async def studio_turn(request: Request, merchant: CurrentMerchant = Depends(char
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("/agent/paypal-actions/{action_id}/approve")
+async def approve_paypal_action(
+    action_id: UUID, body: ActionDecision, merchant: CurrentMerchant = Depends(current_merchant)
+) -> dict[str, Any]:
+    """The owner's click on a change Bundo proposed. Only the exact proposal they saw (its hash) runs, once."""
+    async with connection() as conn:
+        cur = await conn.execute("select paypal_merchant_id, grant_status from merchants where id = %s", (merchant.id,))
+        m = await cur.fetchone()
+    pid = m["paypal_merchant_id"] if m and m["grant_status"] == "granted" else None
+    return await approve_action(merchant.id, pid, action_id, body.args_hash)
+
+
+@router.post("/agent/paypal-actions/{action_id}/decline")
+async def decline_paypal_action(action_id: UUID, merchant: CurrentMerchant = Depends(current_merchant)) -> dict[str, Any]:
+    return await decline_action(merchant.id, action_id)

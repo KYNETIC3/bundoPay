@@ -170,7 +170,7 @@ function ActivityView() {
           {!data ? (
             <p className="text-sm text-muted">Loading…</p>
           ) : data.flows.length === 0 ? (
-            <Empty icon="history" title="Nothing yet">Every run, approval and Copilot request will show here.</Empty>
+            <Empty icon="history" title="Nothing yet">Every run, approval and Rules helper request will show here.</Empty>
           ) : (
             <ul className="-mx-3 space-y-0.5" aria-label="Activity">
               {data.flows.map((f) => {
@@ -216,7 +216,7 @@ function ActivityView() {
                       <p className="text-sm leading-snug">{said.text}</p>
                       <p className="mt-0.5 text-xs text-muted">
                         {clock(e.created_at)}
-                        {e.label === "provider_verified" ? ", confirmed by PayPal" : e.label === "ai_assessment" ? ", Copilot's reading" : ""}
+                        {e.label === "provider_verified" ? ", confirmed by PayPal" : e.label === "ai_assessment" ? ", the Rules helper's reading" : ""}
                       </p>
                     </div>
                   </li>

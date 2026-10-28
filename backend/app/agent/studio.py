@@ -55,6 +55,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from . import paypal_toolkit as toolkit
 from .chat import TOOLS as CHAT_TOOLS
 from app.config import get_settings
 
@@ -77,7 +78,12 @@ SKIP_SIGNATURE = b"skip_thought_signature_validator"
 LOCAL_ID = "bundo_call_"  # ids minted here when Gemini returns none; never sent back to Gemini
 
 # Bundo's own tools. Studio turns never get these, even if a request declares one by the same name.
-BUNDO_TOOLS = frozenset({t["name"] for t in CHAT_TOOLS} | set(READ_ONLY_TOOLS) | set(WRITE_TOOLS))
+BUNDO_TOOLS = frozenset(
+    {t["name"] for t in CHAT_TOOLS}
+    | set(READ_ONLY_TOOLS)
+    | set(WRITE_TOOLS)
+    | {toolkit.PREFIX + m for m in toolkit.READ_METHODS + toolkit.WRITE_METHODS}
+)
 
 FINISH_REASONS = {"STOP": "stop", "MAX_TOKENS": "max_output_tokens", "SAFETY": "content_filter",
                   "PROHIBITED_CONTENT": "content_filter", "BLOCKLIST": "content_filter", "SPII": "content_filter"}

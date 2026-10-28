@@ -75,7 +75,7 @@ function FloorMeter({ operating, floor, currency }: { operating: number; floor: 
       </div>
       <div className="mt-2 flex justify-between gap-4 text-xs text-muted">
         <span>Operating <b className="font-semibold text-ink-2 tabular-nums">{money(String(operating), currency)}</b></span>
-        <span>Always keeps <b className="font-semibold text-ink-2 tabular-nums">{money(String(floor), currency)}</b></span>
+        <span>Keep at least <b className="font-semibold text-ink-2 tabular-nums">{money(String(floor), currency)}</b></span>
       </div>
     </div>
   );

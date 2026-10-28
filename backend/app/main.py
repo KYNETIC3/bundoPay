@@ -11,6 +11,7 @@ from app.config import get_settings
 from app.db import close_pool, connection, open_pool
 from app.deps import close_gateway
 from app.agent.router import router as agent_router
+from app.checkout.router import router as checkout_router
 from app.demo.router import router as demo_router
 from app.signup import router as signup_router
 from app.disputes.router import router as disputes_router
@@ -23,14 +24,20 @@ from app.treasury.service import TreasuryError
 from app.webhooks.router import router as webhooks_router
 
 logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("bundopay")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    settings = get_settings()
+    if settings.demo_email and not settings.gemini_api_key:
+        log.warning("!" * 72)
+        log.warning("DEMO_EMAIL is set but GEMINI_API_KEY is empty: judges will see built-in rules, not Gemini.")
+        log.warning("!" * 72)
     await open_pool()
     start_listener()
     worker_task = None
-    if get_settings().run_worker_in_process:
+    if settings.run_worker_in_process:
         from app.jobs.worker import run_in_background
 
         worker_task = asyncio.create_task(run_in_background())
@@ -103,3 +110,4 @@ app.include_router(events_router)
 app.include_router(treasury_router)
 app.include_router(demo_router)
 app.include_router(signup_router)
+app.include_router(checkout_router)

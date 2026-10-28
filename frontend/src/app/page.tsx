@@ -7,10 +7,12 @@ import { useEffect, useRef, useState } from "react";
 
 import { Countdown } from "@/components/Countdown";
 import { BalanceHero } from "@/components/money";
+import { StartHere, useGuideOpen } from "@/components/StartHere";
 import { Reveal, Skeleton, SuccessTick } from "@/components/motion";
 import { PlanApproval } from "@/components/treasury";
 import { Button, Card, Empty, Icon, SendButton } from "@/components/ui";
 import { feedback } from "@/lib/feedback";
+import { useMerchant } from "@/lib/merchant";
 import { money, when } from "@/lib/format";
 import { agentState } from "@/lib/status";
 import { isOpen } from "@/lib/studio/model";
@@ -31,6 +33,10 @@ export default function HomePage() {
   const [resetSignal, setResetSignal] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const t = overview.data;
+  const { status } = useMerchant();
+  // The demo account starts with the guide and a calm first screen: no Customize or range picker until it's hidden.
+  const guide = useGuideOpen(!!status?.is_demo);
+  const calm = !status || guide !== false;
 
   // The sidebar folds to its rail while the board is customised, so the widgets keep their width.
   useEffect(() => {
@@ -46,6 +52,7 @@ export default function HomePage() {
 
   return (
     <div className="space-y-10">
+      {guide && <StartHere />}
       {overview.error ? (
         <Card><p className="text-sm text-danger">{overview.error}</p></Card>
       ) : !t ? (
@@ -106,10 +113,10 @@ export default function HomePage() {
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
           <div className="flex items-center gap-3">
             <h2 id="trends" className="text-[19px] font-semibold tracking-[-0.015em]">Last {days} days</h2>
-            <RangePicker value={days} onChange={setDays} />
+            {!calm && <RangePicker value={days} onChange={setDays} />}
           </div>
           {/* Building widgets needs a wide screen; phones get the curated board only. */}
-          <div className="hidden items-center gap-2 sm:flex">
+          <div className={`hidden items-center gap-2 ${calm ? "" : "sm:flex"}`}>
             {editing && <Button variant="ghost" className="min-h-9 text-[13px]" onClick={() => setResetSignal((n) => n + 1)}>Reset layout</Button>}
             <Button variant={editing ? "primary" : "ghost"} className="min-h-9 text-[13px]" onClick={() => setEditing(!editing)}>
               {editing ? "Done" : <><Icon name="tune" className="text-[16px]" /> Customize</>}

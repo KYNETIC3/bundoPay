@@ -108,7 +108,7 @@ Supabase stores BundoPay's data and handles logins.
 
 ### 4.2 Create the database tables
 
-The `supabase/migrations/` folder has seven files. Run each one in Supabase, **in this order**:
+The `supabase/migrations/` folder has nine files. Run each one in Supabase, **in this order**:
 
 1. `20261021000000_init.sql`
 2. `20261021120000_agent_limits.sql`
@@ -117,6 +117,8 @@ The `supabase/migrations/` folder has seven files. Run each one in Supabase, **i
 5. `20261024090000_treasury_safety.sql`
 6. `20261025090000_treasury_executor.sql`
 7. `20261026090000_treasury_policies.sql`
+8. `20261027090000_treasury_movable.sql`
+9. `20261028090000_paypal_actions.sql`
 
 For each file:
 
@@ -179,9 +181,9 @@ Treasury moves money into separate accounts for tax, disputes and ads.
 
 ---
 
-## 6. Get a Google AI key (optional)
+## 6. Get a Google AI key (required for the hosted demo)
 
-Bundo uses Google's Gemini AI to explain disputes and answer questions. Without a key, it still works, using simpler built-in rules.
+Bundo uses Google's Gemini AI to explain disputes, draft responses, turn plain words into rules and answer questions. On your own computer it still works without a key, using simpler built-in rules. **The hosted judge demo needs a key**: without one the API logs a warning at startup and the login page tells judges that AI is off.
 
 1. Go to https://aistudio.google.com/apikey.
 2. Click **Create API key**, and copy it into your text file.
@@ -367,6 +369,22 @@ A policy is a rule for moving money, like "every Friday, move spare money into t
 6. Click **Run now** to try it straight away. If the amount is over $5,000, BundoPay asks for your OK first.
 7. Open the **Activity** tab to see every step in plain words.
 
+### 10.6 Make a test sale
+
+This works when you use **Use test account** (or the hosted judge login), because the test store sells from the app's own sandbox business account.
+
+1. Go to **Settings** and click **Open test store**. It opens in a new tab and doesn't need a BundoPay login.
+2. Pick an item and click **Pay with PayPal**.
+3. Log in with your sandbox **personal** (buyer) account and pay.
+4. Click **See the tax set aside**. If you have a tax rule turned on, the Activity tab shows the tax moving into the Tax Reserve.
+
+### 10.7 Ask Bundo about your sales
+
+With the test account, Ask Bundo also uses the **PayPal Agent Toolkit** to read live sandbox data.
+
+1. In **Ask Bundo**, ask *"What did I sell this week?"*. The answer has a **Live from PayPal** label.
+2. Ask *"Add tracking 1Z999AA10123456784 with UPS to my last sale"*. Bundo doesn't change PayPal itself. It shows a card, and nothing is sent until you click **Approve and add tracking**.
+
 For a full demo with example numbers, see [DEMO.md](DEMO.md).
 
 ---
@@ -402,7 +420,8 @@ Render's free plan sleeps after 15 minutes without visitors, and Supabase pauses
    - `FRONTEND_URL`: leave as `https://example.com` for now; you'll fix it in 11.4.
    - `DEMO_EMAIL`: the judge login email.
    - `DEMO_ACCOUNT_EMAILS`: the four emails, separated by commas.
-   - `APPROVAL_SIGNING_KEY` and `AUDIT_CHAIN_KEY`: copy them **exactly** from `backend/.env` (leave `AUDIT_CHAIN_KEY` empty if it's empty there). The demo setup in 11.5 runs on your computer, so both sides must sign with the same keys, or **Verify chain** reports a mismatch.
+   - `GEMINI_API_KEY`: **required** for the judge demo (step 6). Judges should see Gemini at work, not the fallback rules.
+   - `APPROVAL_SIGNING_KEY` and `AUDIT_CHAIN_KEY`: copy them **exactly** from `backend/.env` (leave `AUDIT_CHAIN_KEY` empty if it's empty there). The demo setup in 11.5 runs on your computer, so both sides must sign with the same keys, or the **Check records** button on Jars → Activity reports a mismatch.
 4. Click **Apply**. When it's live, open `https://<your-service>.onrender.com/health`. It should say `{"status":"ok"}`.
 
 ### 11.3 Deploy the website on Vercel

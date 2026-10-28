@@ -7,8 +7,8 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 
 import { Skeleton } from "@/components/motion";
 import { PlanApproval } from "@/components/treasury";
-import { Button, Icon, Pill, SendButton } from "@/components/ui";
-import { api, json } from "@/lib/api";
+import { Button, Empty, Icon, Pill, SendButton } from "@/components/ui";
+import { ApiError, api, json } from "@/lib/api";
 import { money } from "@/lib/format";
 import { agentState } from "@/lib/status";
 import type { PlanItem } from "@/lib/treasury";
@@ -31,6 +31,15 @@ type Card = {
   offer_amount: string | null;
 };
 type PlanMeta = { plan_id: string; plan_hash: string; total: string; items: PlanItem[]; status: string };
+/** A PayPal change Bundo proposed through the PayPal Agent Toolkit. It runs only when the owner approves it. */
+type PayPalAction = {
+  id: string;
+  tool: "create_shipment_tracking";
+  args_json: { tracking_number: string; transaction_id: string; carrier?: string; status?: string };
+  args_hash: string;
+  status: "awaiting_approval" | "submitting" | "done" | "declined" | "failed";
+  error: string | null;
+};
 type Message = {
   id: number | string;
   role: "agent" | "owner";
@@ -40,6 +49,9 @@ type Message = {
   unread?: boolean;
   cards: Card[];
   plan?: PlanMeta | null;
+  paypal_actions?: PayPalAction[];
+  /** The reply used live data from PayPal (through the Agent Toolkit). */
+  live?: boolean;
 };
 
 // How each kind of Bundo update looks: what happened at a glance.
@@ -64,6 +76,7 @@ function AgentConversation() {
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [noModel, setNoModel] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
   const asked = useRef(false);
 
@@ -95,7 +108,8 @@ function AgentConversation() {
     try {
       await api("/agent/chat", json({ content: q }));
     } catch (e) {
-      setError((e as Error).message);
+      if (e instanceof ApiError && e.code === "no_model") setNoModel(true);
+      else setError((e as Error).message);
     } finally {
       await load();
       setPending(null);
@@ -169,7 +183,15 @@ function AgentConversation() {
             <Icon name="progress_activity" className="animate-spin text-[18px]" /> Bundo is checking PayPal…
           </div>
         )}
-        {error && <p className="text-sm text-danger">{error}</p>}
+        {noModel && (
+          <div role="alert">
+            <Empty icon="cloud_off" title="Chat needs Gemini, which is off on this server">
+              Bundo is still reviewing disputes and drafting responses with built-in rules. Open{" "}
+              <Link href="/money" className="font-semibold text-primary">Money</Link> to see them.
+            </Empty>
+          </div>
+        )}
+        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         <div ref={bottom} />
       </div>
 
@@ -205,9 +227,15 @@ function AgentMessage({ m, onChanged }: { m: Message; onChanged: () => void }) {
           {k && <span className="font-semibold text-ink-2">{k.label}</span>}
           <span className="tabular-nums">{new Date(m.created_at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}</span>
           {m.unread && <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-label="new" />}
+          {m.live && (
+            <Pill tone="cerulean">
+              <Icon name="sync" className="text-[14px]" /> Live from PayPal
+            </Pill>
+          )}
         </div>
         <div className="whitespace-pre-wrap rounded-[20px] rounded-tl-md bg-page px-[18px] py-4 text-[15px] leading-relaxed">{m.content}</div>
         {m.cards.map((c) => <DisputeCard key={c.dispute_id} c={c} decision={m.kind === "decision"} onChanged={onChanged} />)}
+        {m.paypal_actions?.map((a) => <PayPalActionCard key={a.id} a={a} onChanged={onChanged} />)}
         {m.plan && <PlanApproval plan={m.plan} onDone={onChanged} />}
       </div>
     </div>
@@ -278,6 +306,63 @@ function DisputeCard({ c, decision, onChanged }: { c: Card; decision: boolean; o
         </div>
       )}
       {error && <p className="mt-2 text-xs text-danger">{error}</p>}
+    </div>
+  );
+}
+
+const ACTION_STATE: Record<PayPalAction["status"], { label: string; tone: "plum" | "cerulean" | "soft" | "danger"; icon: string }> = {
+  awaiting_approval: { label: "Needs your OK", tone: "plum", icon: "approval" },
+  submitting: { label: "Sending to PayPal", tone: "cerulean", icon: "progress_activity" },
+  done: { label: "Added in PayPal", tone: "cerulean", icon: "check" },
+  declined: { label: "Declined", tone: "soft", icon: "block" },
+  failed: { label: "Didn't go through", tone: "danger", icon: "error" },
+};
+
+/** Bundo proposed adding tracking to a PayPal payment. Nothing reaches PayPal until the owner approves this card. */
+function PayPalActionCard({ a, onChanged }: { a: PayPalAction; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const s = ACTION_STATE[a.status];
+  const t = a.args_json;
+
+  async function decide(what: "approve" | "decline") {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/agent/paypal-actions/${a.id}/${what}`, what === "approve" ? json({ args_hash: a.args_hash }) : { method: "POST" });
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-[14px] bg-card px-4 py-3 ring-1 ring-ink/[0.12]">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold">Add shipment tracking in PayPal</p>
+        <Pill tone={s.tone}><Icon name={s.icon} className="text-[14px]" /> {s.label}</Pill>
+      </div>
+      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[13px]">
+        <dt className="text-muted">Tracking number</dt>
+        <dd className="font-mono">{t.tracking_number}</dd>
+        {t.carrier && (<><dt className="text-muted">Carrier</dt><dd>{t.carrier}</dd></>)}
+        <dt className="text-muted">PayPal payment</dt>
+        <dd className="truncate font-mono">{t.transaction_id}</dd>
+      </dl>
+      {a.status === "awaiting_approval" && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-ink/[0.06] pt-3">
+          <Button variant="primary" disabled={busy} onClick={() => decide("approve")} className="min-h-8 px-3.5 text-[13px]">
+            <Icon name="check" className="text-[16px]" /> {busy ? "Sending" : "Approve and add tracking"}
+          </Button>
+          <Button variant="ghost" disabled={busy} onClick={() => decide("decline")} className="min-h-8 text-[13px] text-danger">
+            Decline
+          </Button>
+        </div>
+      )}
+      {a.status === "failed" && a.error && <p className="mt-2 text-xs text-danger">{a.error}</p>}
+      {error && <p role="alert" className="mt-2 text-xs text-danger">{error}</p>}
     </div>
   );
 }
