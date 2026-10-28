@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from uuid import UUID
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, Header, HTTPException
 
 from app.auth import CurrentMerchant, current_merchant
 from app.config import get_settings
@@ -53,14 +53,45 @@ _llm_calls: dict[UUID, deque[float]] = defaultdict(deque)
 LLM_WINDOW_SECONDS = 600
 
 
-def llm_rate_limit(merchant: CurrentMerchant = Depends(current_merchant)) -> CurrentMerchant:
-    """Per-user cap on Gemini-backed requests, so one busy demo user can't use up the shared quota."""
-    now = time.monotonic()
-    calls = _llm_calls[merchant.id]
+def _count_llm_request(merchant_id: UUID, now: float) -> None:
+    calls = _llm_calls[merchant_id]
     while calls and now - calls[0] > LLM_WINDOW_SECONDS:
         calls.popleft()
     if len(calls) >= get_settings().llm_requests_per_10_minutes:
         wait = int(LLM_WINDOW_SECONDS - (now - calls[0])) + 1
         raise HTTPException(429, f"That's a lot of questions at once. Try again in {wait} seconds.")
     calls.append(now)
+
+
+def llm_rate_limit(merchant: CurrentMerchant = Depends(current_merchant)) -> CurrentMerchant:
+    """Per-user cap on Gemini-backed requests, so one busy demo user can't use up the shared quota."""
+    _count_llm_request(merchant.id, time.monotonic())
+    return merchant
+
+
+# (merchant, chart id) -> [first seen, turns so far]. A chart is one request however many turns it takes.
+_chart_turns: dict[tuple[UUID, str], list[float]] = {}
+MAX_TURNS_PER_CHART = 40
+
+
+def chart_rate_limit(
+    merchant: CurrentMerchant = Depends(current_merchant),
+    chart_id: str | None = Header(default=None, alias="X-Bundo-Chart-Id", max_length=64),
+) -> CurrentMerchant:
+    """llm_rate_limit for AG Studio turns: the first turn of a chart counts as one request, later turns of the
+    same chart (same merchant, within the window) are free up to MAX_TURNS_PER_CHART. No header counts every turn."""
+    now = time.monotonic()
+    if not chart_id:
+        _count_llm_request(merchant.id, now)
+        return merchant
+    for key in [k for k, (seen, _) in _chart_turns.items() if now - seen > LLM_WINDOW_SECONDS]:
+        del _chart_turns[key]
+    entry = _chart_turns.get((merchant.id, chart_id))
+    if entry is None:
+        _count_llm_request(merchant.id, now)
+        _chart_turns[(merchant.id, chart_id)] = [now, 1]
+    elif entry[1] >= MAX_TURNS_PER_CHART:
+        raise HTTPException(429, "That chart is taking too many steps. Try asking for something simpler.")
+    else:
+        entry[1] += 1
     return merchant
