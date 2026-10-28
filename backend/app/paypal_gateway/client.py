@@ -309,6 +309,34 @@ class PayPalGateway:
         )
         return body.get("trackers", [])
 
+    # ---------------------------------------------------------------- orders
+
+    async def create_order(
+        self, *, amount: str, currency: str, description: str, reference_id: str, request_id: str
+    ) -> dict[str, Any]:
+        """Checkout order paid to the app's own sandbox business account (no assertion, so the partner
+        account is the payee). `request_id` makes a retried create return the same order."""
+        body = {
+            "intent": "CAPTURE",
+            "purchase_units": [
+                {
+                    "reference_id": reference_id,
+                    "description": description,
+                    "amount": {"currency_code": currency, "value": amount},
+                }
+            ],
+        }
+        return await self._request("POST", "/v2/checkout/orders", json_body=body, request_id=request_id)
+
+    async def get_order(self, order_id: str) -> dict[str, Any]:
+        return await self._request("GET", f"/v2/checkout/orders/{order_id}")
+
+    async def capture_order(self, order_id: str, *, request_id: str) -> dict[str, Any]:
+        # An empty JSON body, so PayPal sees the Content-Type it requires.
+        return await self._request(
+            "POST", f"/v2/checkout/orders/{order_id}/capture", json_body={}, request_id=request_id
+        )
+
     # ------------------------------------------------------- payouts/balances
 
     async def create_payout_batch(

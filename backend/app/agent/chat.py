@@ -7,9 +7,11 @@ import json
 from typing import Any
 from uuid import UUID
 
+from app.audit import audit
 from app.db import connection
 from app.disputes.model import REASON_LABELS
 
+from . import paypal_toolkit as toolkit
 from .llm import LLM
 from .orchestrator import run_agent
 
@@ -27,6 +29,13 @@ If PayPal doesn't offer an action for a dispute, say so plainly.
 Earlier AGENT lines in the conversation include updates you posted yourself (refunds you made within
 the owner's limit, decisions you are waiting on). When the owner says yes to one of those, tell them to
 press Approve on that dispute's card; you cannot approve on their behalf."""
+
+TOOLKIT_PROMPT = """
+
+You also have PayPal tools (names start with paypal_) that read live data from the owner's PayPal sandbox
+account: sales, orders, shipment tracking and disputes. Use them for questions about sales or shipping.
+paypal_create_shipment_tracking does NOT change PayPal: it prepares the change, and the owner approves it with
+the button under your message. Say it is ready for their approval, never that it is done."""
 
 TOOLS: list[dict[str, Any]] = [
     {
@@ -58,11 +67,20 @@ TOOLS: list[dict[str, Any]] = [
 
 
 class ChatTools:
-    def __init__(self, merchant_id: UUID):
+    def __init__(self, merchant_id: UUID, *, use_toolkit: bool = False, runner: Any = None):
         self.merchant_id = merchant_id
         self.touched: dict[str, None] = {}  # dispute ids the reply should offer buttons for
+        self.use_toolkit = use_toolkit
+        self._runner = runner
+        self.live = False  # the reply used live PayPal data
+        self.actions: list[str] = []  # PayPal changes proposed for the owner to approve
+
+    def specs(self) -> list[dict[str, Any]]:
+        return TOOLS + (toolkit.tool_specs() if self.use_toolkit else [])
 
     async def call(self, name: str, args: dict[str, Any]) -> Any:
+        if self.use_toolkit and name.startswith(toolkit.PREFIX):
+            return await self._toolkit_call(name.removeprefix(toolkit.PREFIX), args)
         fn = {
             "list_disputes": self.list_disputes,
             "get_dispute": self.get_dispute,
@@ -72,6 +90,23 @@ class ChatTools:
         if fn is None:
             raise PermissionError(f"Unknown tool {name}")
         return json.loads(json.dumps(await fn(**args), default=str))
+
+    async def _toolkit_call(self, method: str, args: dict[str, Any]) -> Any:
+        """Every toolkit call is audited. Reads run; the write only becomes a proposal for the owner."""
+        is_write = method in toolkit.WRITE_METHODS
+        if not is_write and method not in toolkit.READ_METHODS:
+            raise PermissionError(f"Unknown tool {toolkit.PREFIX}{method}")
+        async with connection() as conn:
+            await audit(conn, "agent.tool_call", merchant_id=self.merchant_id, label="ai_assessment", actor="bundo",
+                        data={"tool": method, "via": "paypal-agent-toolkit", "args": args, "write": is_write})
+            if is_write:
+                proposal = await toolkit.propose(conn, self.merchant_id, method, args)
+                self.actions.append(proposal["action_id"])
+                return proposal
+        runner = self._runner or toolkit.get_runner()
+        result = await runner.run(method, toolkit.validate(method, args))
+        self.live = True
+        return toolkit.trim(result)
 
     async def _owned(self, conn, dispute_id: str) -> dict[str, Any]:
         try:
@@ -142,10 +177,13 @@ class ChatTools:
             return await cur.fetchone()
 
 
-async def chat(merchant_id: UUID, messages: list[dict[str, str]], llm: LLM) -> dict[str, Any]:
-    tools = ChatTools(merchant_id)
+async def chat(
+    merchant_id: UUID, messages: list[dict[str, str]], llm: LLM, *, use_toolkit: bool = False, runner: Any = None
+) -> dict[str, Any]:
+    tools = ChatTools(merchant_id, use_toolkit=use_toolkit, runner=runner)
     transcript = "\n".join(f"{m['role'].upper()}: {m['content']}" for m in messages[-12:])
-    reply = await llm.run(CHAT_PROMPT, f"Conversation so far:\n{transcript}\n\nReply to the last OWNER message.", TOOLS, tools.call)
+    prompt = CHAT_PROMPT + (TOOLKIT_PROMPT if use_toolkit else "")
+    reply = await llm.run(prompt, f"Conversation so far:\n{transcript}\n\nReply to the last OWNER message.", tools.specs(), tools.call)
 
     # Buttons for every dispute the agent looked at or acted on, from the database (never from model text).
     cards: list[dict[str, Any]] = []
@@ -163,4 +201,4 @@ async def chat(merchant_id: UUID, messages: list[dict[str, str]], llm: LLM) -> d
             )
             for r in await cur.fetchall():
                 cards.append({**r, "reason": REASON_LABELS.get(r["reason"] or "", r["reason"])})
-    return {"reply": reply.strip(), "cards": cards}
+    return {"reply": reply.strip(), "cards": cards, "live": tools.live, "paypal_action_ids": tools.actions}

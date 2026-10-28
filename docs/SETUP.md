@@ -108,7 +108,7 @@ Supabase stores BundoPay's data and handles logins.
 
 ### 4.2 Create the database tables
 
-The `supabase/migrations/` folder has seven files. Run each one in Supabase, **in this order**:
+The `supabase/migrations/` folder has nine files. Run each one in Supabase, **in this order**:
 
 1. `20261021000000_init.sql`
 2. `20261021120000_agent_limits.sql`
@@ -117,6 +117,8 @@ The `supabase/migrations/` folder has seven files. Run each one in Supabase, **i
 5. `20261024090000_treasury_safety.sql`
 6. `20261025090000_treasury_executor.sql`
 7. `20261026090000_treasury_policies.sql`
+8. `20261027090000_treasury_movable.sql`
+9. `20261028090000_paypal_actions.sql`
 
 For each file:
 
@@ -366,6 +368,22 @@ A policy is a rule for moving money, like "every Friday, move spare money into t
 5. If you're happy, click **Approve and turn on**.
 6. Click **Run now** to try it straight away. If the amount is over $5,000, BundoPay asks for your OK first.
 7. Open the **Activity** tab to see every step in plain words.
+
+### 10.6 Make a test sale
+
+This works when you use **Use test account** (or the hosted judge login), because the test store sells from the app's own sandbox business account.
+
+1. Go to **Settings** and click **Open test store**. It opens in a new tab and doesn't need a BundoPay login.
+2. Pick an item and click **Pay with PayPal**.
+3. Log in with your sandbox **personal** (buyer) account and pay.
+4. Click **See the tax set aside**. If you have a tax rule turned on, the Activity tab shows the tax moving into the Tax Reserve.
+
+### 10.7 Ask Bundo about your sales
+
+With the test account, Ask Bundo also uses the **PayPal Agent Toolkit** to read live sandbox data.
+
+1. In **Ask Bundo**, ask *"What did I sell this week?"*. The answer has a **Live from PayPal** label.
+2. Ask *"Add tracking 1Z999AA10123456784 with UPS to my last sale"*. Bundo doesn't change PayPal itself. It shows a card, and nothing is sent until you click **Approve and add tracking**.
 
 For a full demo with example numbers, see [DEMO.md](DEMO.md).
 
