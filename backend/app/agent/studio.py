@@ -206,6 +206,26 @@ def build_contents(body: StudioTurnBody) -> tuple[str, list[Any]]:
     return "\n\n".join(system), contents
 
 
+def _has_ref(node: Any) -> bool:
+    if isinstance(node, dict):
+        return "$ref" in node or any(_has_ref(v) for v in node.values())
+    return isinstance(node, list) and any(_has_ref(v) for v in node)
+
+
+def gemini_schema(node: Any) -> Any:
+    """A tool schema Gemini accepts. Gemini refuses a `$ref` loop through required fields (AG Studio's layout
+    tree: a column must hold at least one row, which must hold at least one column...), so arrays that can
+    recurse lose `minItems`. Studio still validates the arguments it gets back."""
+    if isinstance(node, list):
+        return [gemini_schema(v) for v in node]
+    if not isinstance(node, dict):
+        return node
+    out = {k: gemini_schema(v) for k, v in node.items()}
+    if out.get("type") == "array" and "minItems" in out and _has_ref(out.get("items")):
+        del out["minItems"]
+    return out
+
+
 def build_config(body: StudioTurnBody, system: str, thinking: str | None = None) -> Any:
     from google.genai import types
 
@@ -218,7 +238,7 @@ def build_config(body: StudioTurnBody, system: str, thinking: str | None = None)
     }
     if body.tools:
         config["tools"] = [types.Tool(function_declarations=[
-            types.FunctionDeclaration(name=t.name, description=t.description, parameters_json_schema=t.parameters)
+            types.FunctionDeclaration(name=t.name, description=t.description, parameters_json_schema=gemini_schema(t.parameters))
             for t in body.tools
         ])]
         choice = body.tool_choice
@@ -310,5 +330,8 @@ async def stream_turn(llm: GeminiLLM, contents: list[Any], config: Any) -> Async
         log.warning("studio turn failed: %s", exc)
         yield sse({"type": "error", "message": "Bundo couldn't finish that chart step. Please try again."})
         return
+    if finish and finish not in FINISH_REASONS:
+        # e.g. MALFORMED_FUNCTION_CALL: the model tried a tool call it couldn't fit to the schema.
+        log.info("studio turn ended with %s", finish)
     yield sse({"type": "done", "usage": _usage(usage_meta),
                "finish_reason": FINISH_REASONS.get(finish or "STOP", "other"), "model": model})

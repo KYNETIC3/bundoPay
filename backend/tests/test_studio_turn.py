@@ -290,3 +290,30 @@ def test_request_size_and_steps_are_capped(client, monkeypatch):
     assert resp.status_code == 400 and "steps" in resp.json()["detail"]
     too_many_tools = [{**ADD_WIDGET, "name": f"t{i}"} for i in range(49)]
     assert client.post("/agent/studio/turn", json=_turn(tools=too_many_tools)).status_code == 422
+
+
+def test_gemini_schema_drops_min_items_only_on_recursive_arrays():
+    # AG Studio's layout tree: a column holds rows that hold columns, each needing at least one child.
+    schema = {
+        "type": "object",
+        "properties": {"root": {"$ref": "#/$defs/Column"}, "tags": {"type": "array", "items": {"type": "string"}, "minItems": 1}},
+        "$defs": {
+            "Column": {
+                "type": "object",
+                "required": ["children"],
+                "properties": {"children": {"type": "array", "minItems": 1, "items": {"anyOf": [{"$ref": "#/$defs/Column"}, {"type": "string"}]}}},
+            }
+        },
+    }
+    out = studio.gemini_schema(schema)
+    assert "minItems" not in out["$defs"]["Column"]["properties"]["children"]
+    assert out["$defs"]["Column"]["required"] == ["children"]
+    assert out["properties"]["tags"]["minItems"] == 1
+    assert schema["$defs"]["Column"]["properties"]["children"]["minItems"] == 1  # input left untouched
+
+
+def test_tool_schemas_are_sanitised_for_gemini():
+    tool = {"name": "create_plan", "parameters": {"type": "object", "properties": {"kids": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/K"}}}, "$defs": {"K": {"type": "object"}}}}
+    body = studio.StudioTurnBody.model_validate(_turn(tools=[tool]))
+    config = studio.build_config(body, "")
+    assert "minItems" not in config.tools[0].function_declarations[0].parameters_json_schema["properties"]["kids"]
