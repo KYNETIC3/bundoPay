@@ -5,7 +5,7 @@ export function Icon({ name, className = "" }: { name: string; className?: strin
 }
 
 export function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <div className={`rounded-[20px] bg-card p-7 shadow-card ${className}`}>{children}</div>;
+  return <div className={`rounded-[20px] bg-card p-5 shadow-card sm:p-7 ${className}`}>{children}</div>;
 }
 
 export function CardTitle({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
@@ -39,7 +39,7 @@ export function Pill({ tone = "soft", children }: { tone?: Tone; children: React
 type BtnProps = { variant?: "primary" | "secondary" | "ghost"; href?: string; className?: string } & React.ButtonHTMLAttributes<HTMLButtonElement>;
 
 export function Button({ variant = "secondary", href, className = "", children, ...rest }: BtnProps) {
-  const base = "inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-[18px] text-sm font-semibold transition disabled:opacity-50 disabled:cursor-default";
+  const base = "press inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-[18px] text-sm font-semibold transition disabled:opacity-50 disabled:cursor-default";
   const look = {
     primary: "bg-primary text-white hover:bg-primary-container",
     secondary: "bg-card text-ink ring-1 ring-ink/[0.12] hover:bg-[#f7fafb]",

@@ -1,15 +1,20 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 
+import { Skeleton } from "@/components/motion";
 import { PlanApproval } from "@/components/treasury";
 import { Button, Icon, Pill, SendButton } from "@/components/ui";
 import { api, json } from "@/lib/api";
 import { money } from "@/lib/format";
 import { agentState } from "@/lib/status";
 import type { PlanItem } from "@/lib/treasury";
+
+// AG Studio only runs in the browser.
+const ChartBuilder = dynamic(() => import("@/components/ChartBuilder").then((m) => m.ChartBuilder), { ssr: false, loading: () => <Skeleton className="h-36" /> });
 
 type Card = {
   dispute_id: string;
@@ -41,7 +46,7 @@ type Message = {
 const KIND: Record<string, { icon: string; tone: string; label: string }> = {
   auto_refund: { icon: "currency_exchange", tone: "bg-ink text-white", label: "Refunded" },
   decision: { icon: "approval", tone: "bg-primary text-white", label: "Needs your OK" },
-  treasury_approval: { icon: "account_balance", tone: "bg-primary text-white", label: "Treasury: needs your OK" },
+  treasury_approval: { icon: "account_balance", tone: "bg-primary text-white", label: "Jars: needs your OK" },
   submitted: { icon: "send", tone: "bg-primary-fixed text-primary", label: "Sent" },
   outcome: { icon: "flag", tone: "bg-soft text-ink-2", label: "Closed" },
   failed: { icon: "error", tone: "bg-danger-soft text-danger", label: "Didn't go through" },
@@ -238,7 +243,7 @@ function DisputeCard({ c, decision, onChanged }: { c: Card; decision: boolean; o
     <div className="rounded-[14px] bg-card px-4 py-3 ring-1 ring-ink/[0.12]">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <Link href={`/disputes/${c.dispute_id}`} className="block truncate text-sm font-semibold text-ink hover:text-primary">{c.reason}</Link>
+          <Link href={`/money/disputes/${c.dispute_id}`} className="block truncate text-sm font-semibold text-ink hover:text-primary">{c.reason}</Link>
           <div className="mt-1.5 flex items-center gap-2">
             <span className="text-[13px] font-semibold tabular-nums">{money(c.amount, c.currency)}</span>
             <Pill tone={c.archived ? "soft" : a.tone}>{c.archived ? "Cleared" : a.label}</Pill>
@@ -250,7 +255,7 @@ function DisputeCard({ c, decision, onChanged }: { c: Card; decision: boolean; o
           </Button>
         )}
         {!awaiting && !finished && (
-          <Button href={`/disputes/${c.dispute_id}`} className="min-h-8 shrink-0 px-3.5 text-[13px]">Open</Button>
+          <Button href={`/money/disputes/${c.dispute_id}`} className="min-h-8 shrink-0 px-3.5 text-[13px]">Open</Button>
         )}
       </div>
       {awaiting && c.draft_id && c.payload_hash && (
@@ -267,7 +272,7 @@ function DisputeCard({ c, decision, onChanged }: { c: Card; decision: boolean; o
               </Button>
             </>
           ) : null}
-          <Button variant="ghost" href={`/disputes/${c.dispute_id}/approve`} className="min-h-8 text-[13px]">
+          <Button variant="ghost" href={`/money/disputes/${c.dispute_id}/approve`} className="min-h-8 text-[13px]">
             Details &amp; edit
           </Button>
         </div>
@@ -279,8 +284,11 @@ function DisputeCard({ c, decision, onChanged }: { c: Card; decision: boolean; o
 
 export default function AgentPage() {
   return (
-    <Suspense>
-      <AgentConversation />
-    </Suspense>
+    <div className="space-y-6">
+      <Suspense>
+        <AgentConversation />
+      </Suspense>
+      <div className="mx-auto max-w-[820px]"><ChartBuilder /></div>
+    </div>
   );
 }

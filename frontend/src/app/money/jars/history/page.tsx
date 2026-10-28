@@ -9,7 +9,7 @@ function Redirect() {
   const router = useRouter();
   useEffect(() => {
     const q = params.toString();
-    router.replace(`/treasury/activity${q ? `?${q}` : ""}`);
+    router.replace(`/money/jars/activity${q ? `?${q}` : ""}`);
   }, [params, router]);
   return null;
 }

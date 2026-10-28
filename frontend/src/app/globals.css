@@ -54,6 +54,39 @@ body { background: var(--color-page); color: var(--color-ink); font-family: var(
   -webkit-font-smoothing: antialiased;
 }
 
+/* Motion: one easing and three speeds, so everything in the app moves the same way. */
+:root {
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --fast: 120ms;
+  --base: 200ms;
+  --slow: 320ms;
+}
+.rise { animation: rise var(--slow) var(--ease-out) both; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+.press { transition: transform var(--fast) var(--ease-out); }
+.press:active { transform: scale(0.98); }
+.tick-draw { stroke-dasharray: 16; stroke-dashoffset: 16; animation: tick 360ms var(--ease-out) 80ms forwards; }
+@keyframes tick { to { stroke-dashoffset: 0; } }
+.shimmer {
+  background: linear-gradient(90deg, var(--color-soft) 0%, var(--color-card) 50%, var(--color-soft) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+@keyframes shimmer { to { background-position: -200% 0; } }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: var(--base); animation-timing-function: var(--ease-out); }
+@media (prefers-reduced-motion: reduce) {
+  .rise, .tick-draw, .shimmer { animation: none; }
+  .tick-draw { stroke-dashoffset: 0; }
+  .press:active { transform: none; }
+}
+
+/* Horizontal pill rows scroll without showing a bar. */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Phones keep the bottom tab bar clear of the home indicator. */
+.safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 6px); }
+
 /* The side sheet slides in from the right (up from the bottom on phones). */
 dialog.sheet[open] { animation: sheet-in 260ms cubic-bezier(0.32, 0.72, 0, 1); }
 dialog.sheet[open]::backdrop { animation: fade-in 200ms ease-out; }
@@ -66,6 +99,6 @@ dialog.sheet[open]::backdrop { animation: fade-in 200ms ease-out; }
 
 /* AG Studio on Insights: give each widget the same breathing room and lift as the app's cards.
    Single-class selectors, as AG Studio's theming guide recommends, scoped to the board. */
-.insights-board .ag-studio-layout-widget-container { box-shadow: var(--shadow-card); padding: 12px 14px; }
-.insights-board .ag-studio-layout-widget-title { font-size: 14px; color: var(--color-ink-2); hyphens: none; }
-.insights-board .ag-studio-layout-widget-caption { font-size: 12px; color: var(--color-muted); hyphens: none; }
+.board .ag-studio-layout-widget-container { box-shadow: var(--shadow-card); padding: 12px 14px; }
+.board .ag-studio-layout-widget-title { font-size: 14px; color: var(--color-ink-2); hyphens: none; }
+.board .ag-studio-layout-widget-caption { font-size: 12px; color: var(--color-muted); hyphens: none; }

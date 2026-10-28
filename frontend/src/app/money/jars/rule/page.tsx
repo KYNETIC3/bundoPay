@@ -120,7 +120,7 @@ function Editor() {
     setSim(null);
     changed();
     await reload();
-    if (!policy) router.replace(`/treasury/policy?id=${r.policy_id}`);
+    if (!policy) router.replace(`/money/jars/rule?id=${r.policy_id}`);
   }
 
   async function simulate() {
@@ -135,7 +135,7 @@ function Editor() {
     if (!pid || !saved) return;
     const r = await step("approve", () => treasury.approve(pid, saved.version, saved.spec_hash));
     if (r) {
-      setDone("Approved. This policy is now running.");
+      setDone("Approved. This rule is now running.");
       changed();
       await reload();
     }
@@ -201,12 +201,12 @@ function Editor() {
             </div>
           )}
           {s.kind === "ad_sweep" && (
-            <Field label={`Sweep to ${ROLE_LABELS.ad_spend}`} hint="If Operating would drop below its floor, reserves are funded first and only what still fits is moved.">
+            <Field label={`Move to ${ROLE_LABELS.ad_spend}`} hint="If Operating would drop below what it always keeps, the other jars are filled first and only what still fits is moved.">
               <input inputMode="decimal" className={input} value={s.amount} onChange={(e) => set({ amount: e.target.value })} />
             </Field>
           )}
           {s.kind === "rebalance" && (
-            <Field label="Then top up ad spend by up to" hint="After tax and the dispute buffer are funded, in that order.">
+            <Field label="Then top up ad spend by up to" hint="After the Tax and Dispute cover jars are filled, in that order.">
               <input inputMode="decimal" className={input} value={s.ad_amount} onChange={(e) => set({ ad_amount: e.target.value })} />
             </Field>
           )}
@@ -218,7 +218,7 @@ function Editor() {
             <li>Never more than <strong>{money(lim.hard_cap_per_run, currency)}</strong> per run or <strong>{money(lim.hard_cap_per_week, currency)}</strong> per week.</li>
             <li>Pauses itself if PayPal turns down 3 runs in a row.</li>
           </ul>
-          <p className="text-xs text-muted">These apply to every policy. Change them in Accounts.</p>
+          <p className="text-xs text-muted">These apply to every rule. Change them in Accounts.</p>
         </Block>
 
         <Block tag="If a check fails" icon="notifications" folded>
@@ -248,7 +248,7 @@ function Editor() {
         <Card className="lg:sticky lg:top-10">
           <CardTitle>Preview</CardTitle>
           {!policy || !saved || dirty ? (
-            <p className="text-sm text-muted">Save your changes, then preview what this policy would do over its next few runs. You approve exactly what you previewed.</p>
+            <p className="text-sm text-muted">Save your changes, then preview what this rule would do over its next few runs. You approve exactly what you previewed.</p>
           ) : (
             <div className="space-y-4">
               <div className="flex flex-wrap items-end gap-3">

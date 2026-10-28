@@ -119,17 +119,17 @@ export type CopilotResult = {
 
 export const ROLE_LABELS: Record<Role, string> = {
   operating: "Operating",
-  tax_reserve: "Tax Reserve",
-  dispute_buffer: "Dispute Margin Buffer",
-  ad_spend: "Ad-Spend Wallet",
+  tax_reserve: "Tax",
+  dispute_buffer: "Dispute cover",
+  ad_spend: "Ads",
   other: "Other",
 };
 
 export const KIND_LABELS: Record<PolicyKind, { title: string; icon: string; blurb: string }> = {
-  tax_reserve: { title: "Rolling tax reserve", icon: "receipt_long", blurb: "Set aside a share of every sale for tax the moment PayPal captures it." },
-  dispute_buffer: { title: "Dispute margin buffer", icon: "shield", blurb: "Keep enough aside to cover open disputes plus a share of recent sales." },
-  ad_sweep: { title: "Ad-spend sweep", icon: "campaign", blurb: "Move a set amount to ad spend each week, only if the floor holds afterwards." },
-  rebalance: { title: "Multi-account rebalance", icon: "balance", blurb: "Top up every reserve in one batch, in priority order, never below the floor." },
+  tax_reserve: { title: "Tax jar, per sale", icon: "receipt_long", blurb: "Set aside a share of every sale for tax the moment PayPal captures it." },
+  dispute_buffer: { title: "Dispute cover", icon: "shield", blurb: "Keep enough aside to cover open disputes plus a share of recent sales." },
+  ad_sweep: { title: "Weekly ads top-up", icon: "campaign", blurb: "Move a set amount to the Ads jar each week, only if the floor holds afterwards." },
+  rebalance: { title: "Top up every jar", icon: "balance", blurb: "Top up every jar in one batch, in priority order, never below the floor." },
 };
 
 export const DEFAULT_SPECS: Record<PolicyKind, Spec> = {
@@ -144,7 +144,7 @@ export const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
 export const CHECK_LABELS: Record<string, string> = {
   ok: "All 7 checks passed",
   "0_empty_plan": "Nothing to move",
-  "1_no_authority": "No approved policy covers this",
+  "1_no_authority": "No approved rule covers this",
   "2_unverified_trigger": "Trigger isn't a verified source",
   "3_unverified_account": "Destination isn't verified",
   "3_unknown_kind": "Unknown movement",
@@ -152,7 +152,7 @@ export const CHECK_LABELS: Record<string, string> = {
   "4_hard_cap": "Above the hard cap",
   "4_period_cap": "Above a period cap",
   "5_duplicate": "Duplicate",
-  "6_liquidity_floor": "Would breach the liquidity floor",
+  "6_liquidity_floor": "Would dip below what Operating always keeps",
   "6_balance_unknown": "PayPal shows no Operating balance. Set an allowed amount under Accounts \u2192 Safety limits",
   "7_needs_approval": "Above your auto-run limit",
   owner_declined: "You declined",
@@ -219,7 +219,7 @@ export function describePolicy(d: PolicyDoc, currency: string): string {
   if (s.kind === "tax_reserve") return `Sets aside ${pc(s.rate)} of every sale for tax.`;
   if (s.kind === "dispute_buffer") return `Keeps ${pc(s.coverage)} of open disputes plus ${pc(s.volume_pct)} of 30-day sales aside.`;
   if (s.kind === "ad_sweep") return `Every ${WEEKDAYS[s.weekday]}, moves ${money(s.amount, currency)} to ad spend if Operating stays above its floor.`;
-  return `Each day, tops up every reserve in priority order${Number(s.ad_amount) > 0 ? `, then ad spend up to ${money(s.ad_amount, currency)}` : ""}.`;
+  return `Each day, tops up every jar in priority order${Number(s.ad_amount) > 0 ? `, then ad spend up to ${money(s.ad_amount, currency)}` : ""}.`;
 }
 
 export type State = { label: string; tone: "cerulean" | "plum" | "cream" | "soft" };
@@ -250,7 +250,7 @@ export function flowTitle(policy: string | null, startedBy: string | null): stri
   const k = kindOf(policy);
   if (k) return KIND_LABELS[k].title;
   if (startedBy?.startsWith("copilot")) return "Copilot request";
-  return "Treasury activity";
+  return "Jars activity";
 }
 
 export type Said = { text: string; tone: "good" | "wait" | "stop" | "quiet"; icon: string };
@@ -272,12 +272,12 @@ export function describeEntry(e: FeedEntry, currency = "USD"): Said | null {
   switch (e.event) {
     case "trigger.verified": {
       const why = s("slot").startsWith("manual") ? "you asked" : s("slot").startsWith("capture") ? "a sale came in" : "it was scheduled";
-      return { text: `${k ? KIND_LABELS[k].title : "A policy"} started because ${why}`, tone: "quiet", icon: "play_circle" };
+      return { text: `${k ? KIND_LABELS[k].title : "A rule"} started because ${why}`, tone: "quiet", icon: "play_circle" };
     }
     case "trigger.unverified": return { text: "A run was ignored because its trigger couldn't be confirmed", tone: "stop", icon: "block" };
     case "plan.proposed": return { text: items ? `Planned ${items}` : "Planned a transfer", tone: "quiet", icon: "edit_note" };
     case "plan.rebalanced": return { text: `Adjusted the plan to ${items || "fit"} so Operating stays above its floor`, tone: "quiet", icon: "tune" };
-    case "plan.skipped": return { text: "Nothing to move: every reserve is already on target", tone: "quiet", icon: "check_circle" };
+    case "plan.skipped": return { text: "Nothing to move: every jar is already full enough", tone: "quiet", icon: "check_circle" };
     case "safety.allow": return { text: `Safety checks passed${sum ? ` for ${sum}` : ""}`, tone: "good", icon: "verified_user" };
     case "safety.ask": return { text: `${sum || "A transfer"} is waiting for your OK: it's above your auto-run limit`, tone: "wait", icon: "pending_actions" };
     case "safety.block": return { text: `Stopped ${sum || "a transfer"}: ${check}. Nothing moved`, tone: "stop", icon: "block" };
@@ -291,12 +291,12 @@ export function describeEntry(e: FeedEntry, currency = "USD"): Said | null {
     case "execution.item_failed": return { text: "One payment in the transfer didn't go through", tone: "stop", icon: "error" };
     case "execution.refused": return { text: "Not sent: the destination account is no longer confirmed", tone: "stop", icon: "block" };
     case "capture.recorded": return { text: `A sale of ${sum || "money"} came in`, tone: "quiet", icon: "payments" };
-    case "policy.version_drafted": return { text: `${by} drafted ${doc?.name ? `“${doc.name}”` : "a policy"}`, tone: "quiet", icon: by === "Copilot" ? "auto_awesome" : "edit" };
+    case "policy.version_drafted": return { text: `${by} drafted ${doc?.name ? `“${doc.name}”` : "a rule"}`, tone: "quiet", icon: by === "Copilot" ? "auto_awesome" : "edit" };
     case "policy.simulated": return null; // a preview moves nothing
-    case "policy.approved": return { text: "You approved a policy and turned it on", tone: "good", icon: "toggle_on" };
-    case "policy.paused": return { text: "A policy was paused", tone: "quiet", icon: "pause_circle" };
-    case "policy.active": return { text: "A policy was resumed", tone: "quiet", icon: "play_circle" };
-    case "policy.retired": return { text: "A policy was retired", tone: "quiet", icon: "archive" };
+    case "policy.approved": return { text: "You approved a rule and turned it on", tone: "good", icon: "toggle_on" };
+    case "policy.paused": return { text: "A rule was paused", tone: "quiet", icon: "pause_circle" };
+    case "policy.active": return { text: "A rule was resumed", tone: "quiet", icon: "play_circle" };
+    case "policy.retired": return { text: "A rule was retired", tone: "quiet", icon: "archive" };
     case "account.added": return { text: `Added the ${s("name") || "new"} account`, tone: "quiet", icon: "add_card" };
     case "account.edited": return { text: "Updated an account's details", tone: "quiet", icon: "edit" };
     case "account.verified": return { text: "Confirmed an account's details", tone: "good", icon: "verified" };
@@ -304,7 +304,7 @@ export function describeEntry(e: FeedEntry, currency = "USD"): Said | null {
     case "copilot.interpreted":
       return s("intent") === "move_now"
         ? { text: "Copilot was asked to move money now, which it can't do", tone: "stop", icon: "auto_awesome" }
-        : { text: "Copilot read your request and drafted policies", tone: "quiet", icon: "auto_awesome" };
+        : { text: "Copilot read your request and drafted rules", tone: "quiet", icon: "auto_awesome" };
     default: return null;
   }
 }
@@ -363,5 +363,5 @@ export function downloadStatement(movements: Movement[]) {
       reference(m.flow_id),
     ]);
   }
-  downloadCsv(`bundopay-treasury-statement-${new Date().toISOString().slice(0, 10)}.csv`, rows);
+  downloadCsv(`bundopay-jars-statement-${new Date().toISOString().slice(0, 10)}.csv`, rows);
 }

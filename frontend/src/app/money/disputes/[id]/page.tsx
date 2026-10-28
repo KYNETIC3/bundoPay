@@ -62,7 +62,7 @@ export default function DisputePage() {
     setBusy(true);
     try {
       await api(`/disputes/${id}/${clear ? "clear" : "restore"}`, { method: "POST" });
-      if (clear) router.push("/disputes");
+      if (clear) router.push("/money/disputes");
       else await load();
     } catch (e) {
       setMessage((e as Error).message);
@@ -143,7 +143,7 @@ export default function DisputePage() {
             </div>
             <div className="flex flex-wrap gap-2">
               {draft && ["awaiting_approval", "failed"].includes(draft.status) && (
-                <Button variant="primary" href={`/disputes/${d.id}/approve`} className="bg-aqua text-ink hover:bg-ice">
+                <Button variant="primary" href={`/money/disputes/${d.id}/approve`} className="bg-aqua text-ink hover:bg-ice">
                   Review and approve
                 </Button>
               )}

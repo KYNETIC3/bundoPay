@@ -10,7 +10,7 @@ import { Sheet } from "./overlay";
 import { Button, Icon, IconButton, SendButton } from "./ui";
 
 const EXAMPLE =
-  "Hold 8.25% of every sale for tax. Keep a dispute buffer of 100% of open disputes plus 2% of 30-day sales. " +
+  "Hold 8.25% of every sale for tax. Keep dispute cover of 100% of open disputes plus 2% of 30-day sales. " +
   "Every Friday, sweep anything above a $25k operating floor into ad spend, up to $15k. Auto-run under $5k.";
 
 /** Plain words in, draft policies out. The copilot can't activate anything: drafts still go through the
@@ -19,8 +19,8 @@ export function CopilotButton({ currency, onChanged }: { currency: string; onCha
   const [open, setOpen] = useState(false);
   return (
     <>
-      <IconButton icon="auto_awesome" label="Draft a policy in plain words" tone="soft" onClick={() => setOpen(true)} />
-      <Sheet open={open} onClose={() => setOpen(false)} title="Treasury Copilot">
+      <IconButton icon="auto_awesome" label="Draft a rule in plain words" tone="soft" onClick={() => setOpen(true)} />
+      <Sheet open={open} onClose={() => setOpen(false)} title="Rules Copilot">
         <Copilot currency={currency} onChanged={onChanged} />
       </Sheet>
     </>
@@ -55,7 +55,7 @@ function Copilot({ currency, onChanged }: { currency: string; onChanged: () => v
     setBusy(true);
     try {
       const r = await treasury.acceptDrafts(result.drafts);
-      setKept(`Saved ${r.created.length} draft${r.created.length === 1 ? "" : "s"}. Open each one in Policies to preview and approve it.`);
+      setKept(`Saved ${r.created.length} draft${r.created.length === 1 ? "" : "s"}. Open each one in Rules to preview and approve it.`);
       changed();
       onChanged();
     } catch (err) {
@@ -76,8 +76,8 @@ function Copilot({ currency, onChanged }: { currency: string; onChanged: () => v
           onChange={(e) => setText(e.target.value)}
           rows={3}
           data-autofocus
-          placeholder="Describe your policy in plain words…"
-          aria-label="Describe your treasury policy"
+          placeholder="Describe your rule in plain words…"
+          aria-label="Describe your rule"
           className="min-h-12 min-w-0 flex-1 resize-y rounded-2xl bg-card px-4 py-3 text-[15px] ring-1 ring-inset ring-ink/30 placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary"
         />
         <SendButton disabled={busy || !text.trim()} />
@@ -96,7 +96,7 @@ function Copilot({ currency, onChanged }: { currency: string; onChanged: () => v
               <p className="flex items-center gap-2 font-semibold text-danger">
                 <Icon name="block" className="text-[18px]" /> Copilot can&rsquo;t move money</p>
               <p className="mt-1 text-ink-2">
-                Money only moves through a policy you approved, or your own tap on an approval. Nothing moved ({CHECK_LABELS[result.verdict.check]?.toLowerCase() ?? "not allowed"}).
+                Money only moves through a rule you approved, or your own tap on an approval. Nothing moved ({CHECK_LABELS[result.verdict.check]?.toLowerCase() ?? "not allowed"}).
               </p>
             </div>
           ) : (
@@ -127,7 +127,7 @@ function Copilot({ currency, onChanged }: { currency: string; onChanged: () => v
                 result.limit_suggestions.solo_limit && `auto-running up to ${money(result.limit_suggestions.solo_limit, currency)}`,
               ].filter(Boolean).join(" and ")}
               . Those are account limits, so the copilot can&rsquo;t set them. Check them in{" "}
-              <Link href="/treasury/setup" className="font-semibold text-primary">Accounts</Link>.
+              <Link href="/money/jars/accounts" className="font-semibold text-primary">Accounts</Link>.
             </p>
           )}
 

@@ -1,75 +1,100 @@
 "use client";
 
-import SimpleInsights from "@/components/SimpleInsights";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { MoneyBreakdown } from "@/components/treasury";
+import { Countdown } from "@/components/Countdown";
+import { BalanceHero } from "@/components/money";
+import { Reveal, Skeleton, SuccessTick } from "@/components/motion";
+import { PlanApproval } from "@/components/treasury";
 import { Button, Card, Empty, Icon, SendButton } from "@/components/ui";
-import { when } from "@/lib/format";
-import { useLive } from "@/lib/hooks";
-import type { Insights, Overview as Treasury } from "@/lib/treasury";
+import { feedback } from "@/lib/feedback";
+import { money, when } from "@/lib/format";
+import { agentState } from "@/lib/status";
+import { isOpen } from "@/lib/studio/model";
+import { useMoneyModel } from "@/lib/studio/useModel";
 import type { DisputeSummary } from "@/lib/types";
 
-// AG Studio measures the page and uses localStorage, so it only ever renders in the browser.
-// AG Studio is licensed; without a key it watermarks the board, so the plain board is shown instead.
-const LICENSED = !!process.env.NEXT_PUBLIC_AG_STUDIO_LICENSE;
-const InsightsBoard = dynamic(() => import("@/components/InsightsBoard"), { ssr: false, loading: () => <BoardSkeleton /> });
+// AG Studio measures the page and uses localStorage, so boards only ever render in the browser.
+const Board = dynamic(() => import("@/components/Board"), { ssr: false, loading: () => <Skeleton className="h-[480px]" /> });
 
-export default function InsightsPage() {
-  const { data: t, error: treasuryError } = useLive<Treasury>("/treasury/overview", 15_000);
-  const { data: disputes } = useLive<DisputeSummary[]>("/disputes");
-  const { data: insights } = useLive<Insights>("/treasury/insights?days=90", 60_000);
+const needsAnswer = (d: DisputeSummary) =>
+  isOpen(d) && ((d.status === "WAITING_FOR_SELLER_RESPONSE" && d.draft_status !== "submitted") || d.draft_status === "awaiting_approval");
+
+/** Home answers three questions, in order: how much can I spend, does anything need me, and how is it going. */
+export default function HomePage() {
   const [days, setDays] = useState<7 | 30 | 90>(30);
+  const { model, overview, disputes, insights, hasStore, ready, currency } = useMoneyModel(days);
   const [editing, setEditing] = useState(false);
   const [resetSignal, setResetSignal] = useState(0);
-  const open = (disputes ?? []).filter((d) => d.status !== "RESOLVED");
-  const disputesWaiting = open.filter((d) => (d.status === "WAITING_FOR_SELLER_RESPONSE" && d.draft_status !== "submitted") || d.draft_status === "awaiting_approval").length;
-  const transfersWaiting = (t?.plans ?? []).filter((p) => p.status === "needs_approval").length;
-  const currency = t?.limits.currency ?? open.find((d) => d.currency)?.currency ?? "USD";
+  const [notice, setNotice] = useState<string | null>(null);
+  const t = overview.data;
   const needsSetup = t ? !t.accounts.some((a) => a.role === "operating") || t.accounts.every((a) => !a.verified_at) : false;
+  const plans = (t?.plans ?? []).filter((p) => p.status === "needs_approval");
+  const answer = (disputes.data ?? []).filter(needsAnswer).sort((a, b) => (a.due_date ?? "~").localeCompare(b.due_date ?? "~"));
   const running = (t?.policies ?? []).filter((p) => p.status === "active");
   const next = running.map((p) => p.next_run_at).filter((x): x is string => !!x).sort()[0];
-  const hasActivity = !!disputes?.length || !!insights?.movements.length;
+  const hasActivity = !!disputes.data?.length || !!insights.data?.movements.length;
 
   return (
     <div className="space-y-10">
-      {treasuryError ? (
-        <Card><p className="text-sm text-danger">{treasuryError}</p></Card>
+      {overview.error ? (
+        <Card><p className="text-sm text-danger">{overview.error}</p></Card>
       ) : !t ? (
-        <Card><p className="text-sm text-muted">Loading your balance…</p></Card>
+        <Skeleton className="h-44" />
       ) : needsSetup ? (
         <Card>
-          <Empty icon="account_balance" title="Set up your treasury accounts">
-            Add the account your business runs on and the reserves money is set aside into, and this page splits your
-            balance by what it&rsquo;s for.
-            <div className="mt-5"><Button variant="primary" href="/treasury/setup">Add accounts</Button></div>
+          <Empty icon="savings" title="Set up your accounts">
+            Add the account your business runs on and the jars money is set aside into, and Home shows what&rsquo;s
+            actually free to spend.
+            <div className="mt-5"><Button variant="primary" href="/money/jars/accounts">Add accounts</Button></div>
           </Empty>
         </Card>
       ) : (
-        <MoneyBreakdown
-          positions={t.positions}
-          floor={t.limits.liquidity_floor}
-          currency={currency}
-          actions={<Button variant="ghost" href="/treasury" className="min-h-9 text-[13px]">Treasury <Icon name="chevron_right" className="text-[16px]" /></Button>}
+        <BalanceHero
+          overview={t}
+          actions={<Button variant="ghost" href="/money/jars" className="min-h-9 text-[13px]">Jars <Icon name="chevron_right" className="text-[16px]" /></Button>}
         />
       )}
 
-      {t && disputes && (transfersWaiting + disputesWaiting > 0 ? (
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[19px] font-semibold tracking-[-0.015em]">
-          <span className="h-2 w-2 rounded-full bg-primary" aria-hidden />
-          Needs you:
-          {transfersWaiting > 0 && <Link href="/treasury" className="text-primary underline-offset-4 hover:underline">{transfersWaiting} {transfersWaiting === 1 ? "transfer" : "transfers"} to OK</Link>}
-          {transfersWaiting > 0 && disputesWaiting > 0 && <span className="text-muted">·</span>}
-          {disputesWaiting > 0 && <Link href="/disputes" className="text-primary underline-offset-4 hover:underline">{disputesWaiting} {disputesWaiting === 1 ? "dispute" : "disputes"} to answer</Link>}
-        </p>
-      ) : (
-        <p className="flex items-center gap-2 text-[15px] text-muted">
-          <Icon name="check_circle" className="text-primary" /> Nothing needs you right now.
-        </p>
-      ))}
+      {t && disputes.data && (
+        <section aria-labelledby="needs-you" className="space-y-4">
+          {plans.length + answer.length > 0 ? (
+            <>
+              <h2 id="needs-you" className="flex items-center gap-2 text-[19px] font-semibold tracking-[-0.015em]">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-primary motion-reduce:animate-none" aria-hidden /> Needs you
+              </h2>
+              <div className="grid gap-4 lg:grid-cols-2">
+                {plans.slice(0, 2).map((p, i) => (
+                  <Reveal key={p.id} index={i}>
+                    <PlanApproval
+                      plan={{ plan_id: p.id, plan_hash: p.plan_hash, total: p.total, items: p.items_json, status: p.status, reason: p.reason, expires_at: p.expires_at }}
+                      currency={currency}
+                      onDone={(said) => {
+                        setNotice(said);
+                        feedback(said.startsWith("Approved") ? "moved" : "tap");
+                        overview.reload();
+                      }}
+                    />
+                  </Reveal>
+                ))}
+                {answer.slice(0, 4 - Math.min(2, plans.length)).map((d, i) => <Reveal key={d.id} index={plans.length + i}><AnswerCard d={d} /></Reveal>)}
+              </div>
+              {plans.length > 2 || answer.length > 4 - Math.min(2, plans.length) ? (
+                <p className="text-sm">
+                  <Link href={answer.length > 2 ? "/money/disputes" : "/money/jars"} className="font-medium text-primary hover:text-ink">See everything that needs you</Link>
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <p id="needs-you" className="rise flex items-center gap-2 text-[15px] text-ink-2">
+              <SuccessTick /> {notice ?? "All clear. Nothing needs you right now."}
+            </p>
+          )}
+        </section>
+      )}
 
       <section aria-labelledby="trends" className="space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
@@ -77,37 +102,52 @@ export default function InsightsPage() {
             <h2 id="trends" className="text-[19px] font-semibold tracking-[-0.015em]">Last {days} days</h2>
             <RangePicker value={days} onChange={setDays} />
           </div>
-          <div className="flex items-center gap-2">
-            {editing && (
-              <Button variant="ghost" className="min-h-9 text-[13px]" onClick={() => setResetSignal((n) => n + 1)}>Reset layout</Button>
-            )}
-            {/* Building widgets needs a wide screen; phones get the curated board only. */}
-            {LICENSED && <span className="hidden sm:contents">
-              <Button variant={editing ? "primary" : "ghost"} className="min-h-9 text-[13px]" onClick={() => setEditing(!editing)}>
-                {editing ? "Done" : <><Icon name="tune" className="text-[16px]" /> Customize</>}
-              </Button>
-            </span>}
+          {/* Building widgets needs a wide screen; phones get the curated board only. */}
+          <div className="hidden items-center gap-2 sm:flex">
+            {editing && <Button variant="ghost" className="min-h-9 text-[13px]" onClick={() => setResetSignal((n) => n + 1)}>Reset layout</Button>}
+            <Button variant={editing ? "primary" : "ghost"} className="min-h-9 text-[13px]" onClick={() => setEditing(!editing)}>
+              {editing ? "Done" : <><Icon name="tune" className="text-[16px]" /> Customize</>}
+            </Button>
           </div>
         </div>
 
-        {!insights || !disputes ? (
-          <BoardSkeleton />
+        {!ready ? (
+          <Skeleton className="h-[480px]" />
         ) : !hasActivity ? (
           <Card>
-            <Empty icon="insights" title="Insights fill in as you go">
+            <Empty icon="insights" title="This fills in as you go">
               After your first transfers or disputes, you&rsquo;ll see what&rsquo;s at stake, what Bundo handled and what was set aside.
-              {next && <span className="mt-2 block">Next policy run {when(next)}.</span>}
+              {next && <span className="mt-2 block">Next rule runs {when(next)}.</span>}
             </Empty>
           </Card>
         ) : (
-          !LICENSED ? (
-            <SimpleInsights currency={currency} disputes={disputes} insights={insights} days={days} />
-          ) : <InsightsBoard currency={currency} disputes={disputes} insights={insights} days={days} editing={editing} resetSignal={resetSignal} />
+          <Board id="home" data={model} store={hasStore} editing={editing} resetSignal={resetSignal} />
         )}
       </section>
 
       <div className="flex justify-end"><ChatToggle /></div>
     </div>
+  );
+}
+
+/** A dispute waiting on the merchant: what it is, how much, and how long is left to answer. */
+function AnswerCard({ d }: { d: DisputeSummary }) {
+  const a = agentState({ status: d.status, draft_status: d.draft_status ?? null, draft_action: d.draft_action ?? null });
+  const ready = d.draft_status === "awaiting_approval";
+  return (
+    <Link href={ready ? `/money/disputes/${d.id}/approve` : `/money/disputes/${d.id}`} className="press group flex h-full flex-col rounded-[18px] bg-card p-5 ring-1 ring-ink/[0.08] transition hover:shadow-lift">
+      <span className="flex items-start justify-between gap-3">
+        <span className="min-w-0">
+          <span className="block text-[22px] font-semibold tabular-nums tracking-[-0.02em]">{money(d.amount, d.currency)}</span>
+          <span className="mt-1 block truncate text-[13px] text-muted">{d.reason_label ?? "Dispute"}</span>
+        </span>
+        <Countdown due={d.due_date} />
+      </span>
+      <span className="mt-auto flex items-center justify-between gap-3 pt-5 text-sm font-semibold text-primary">
+        {ready ? "Review Bundo's answer" : a.label}
+        <Icon name="chevron_right" className="transition group-hover:translate-x-0.5" />
+      </span>
+    </Link>
   );
 }
 
@@ -130,16 +170,6 @@ function RangePicker({ value, onChange }: { value: number; onChange: (d: (typeof
           {d}d
         </button>
       ))}
-    </div>
-  );
-}
-
-/** Same footprint as the board, so nothing jumps when AG Studio loads. */
-function BoardSkeleton() {
-  return (
-    <div aria-hidden className="grid h-[480px] grid-cols-2 grid-rows-[144px_1fr] gap-4 sm:grid-cols-4">
-      {[0, 1, 2, 3].map((i) => <div key={i} className="animate-pulse rounded-[20px] bg-card motion-reduce:animate-none" />)}
-      <div className="col-span-2 animate-pulse rounded-[20px] bg-card motion-reduce:animate-none sm:col-span-4" />
     </div>
   );
 }
