@@ -31,6 +31,12 @@ export default function HomePage() {
   const [resetSignal, setResetSignal] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const t = overview.data;
+
+  // The sidebar folds to its rail while the board is customised, so the widgets keep their width.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("board-editing", { detail: editing }));
+    return () => void window.dispatchEvent(new CustomEvent("board-editing", { detail: false }));
+  }, [editing]);
   const needsSetup = t ? !t.accounts.some((a) => a.role === "operating") || t.accounts.every((a) => !a.verified_at) : false;
   const plans = (t?.plans ?? []).filter((p) => p.status === "needs_approval");
   const answer = (disputes.data ?? []).filter(needsAnswer).sort((a, b) => (a.due_date ?? "~").localeCompare(b.due_date ?? "~"));
