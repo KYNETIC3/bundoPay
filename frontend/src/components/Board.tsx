@@ -12,6 +12,10 @@ if (process.env.NODE_ENV !== "production") enableStudioDevValidations();
 // Viewers get a clean board; the field and widget panels only appear while customising.
 const PANELS = { view: { left: [] }, edit: { left: ["data" as const], right: ["edit" as const] } };
 
+/** Customising opens with the field list folded to its chevron: it's only needed to add a widget, and two open
+ * panels squeeze the widgets being arranged. Its chevron opens it whenever it's wanted. */
+const dataTucked = (s: AgReportState): AgReportState => ({ ...s, panels: { ...s.panels, data: { ...s.panels?.data, collapsed: true } } });
+
 export type BoardProps = {
   id: BoardId;
   data: AgDataSourcesDefinition;
@@ -54,8 +58,14 @@ export default function Board({ id, data, store = false, editing = false, resetS
     if (resetSignal === appliedReset.current) return;
     appliedReset.current = resetSignal;
     saveBoard(id, null);
-    studio.current?.api?.setState(curatedBoard(id, columns, { store }));
+    studio.current?.api?.setState(dataTucked(curatedBoard(id, columns, { store })));
   }, [resetSignal, columns, id, store]);
+
+  // AG Studio rebuilds its panels on entering edit mode, so the fold is applied as customising starts.
+  useEffect(() => {
+    const api = studio.current?.api;
+    if (editing && api) api.setState(dataTucked(api.getState()));
+  }, [editing]);
 
   // A chart pinned from Ask Bundo, or a change in another tab, shows up without a reload.
   useEffect(() => {

@@ -3,7 +3,7 @@
 import type { Session } from "@supabase/supabase-js";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
 import { startEventStream, stopEventStream } from "@/lib/events";
@@ -72,6 +72,7 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [unread, setUnread] = useState(0);
+  const rail = useRail(pathname);
 
   useEffect(() => {
     const check = () => api<{ count: number }>("/agent/unread").then((r) => setUnread(r.count)).catch(() => {});
@@ -125,24 +126,43 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
   }
 
   return (
-    <div className="min-h-screen pb-20 pt-14 md:pb-0 md:pl-[240px] md:pt-0">
-      <aside className="fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-2 border-b border-ink/[0.06] bg-white/70 px-4 backdrop-blur-xl md:inset-y-0 md:left-0 md:right-auto md:h-full md:w-[240px] md:flex-col md:items-stretch md:gap-8 md:border-b-0 md:border-r md:px-4 md:py-7">
-        <div className="flex items-center gap-3 md:px-3">
-          <span className="grid h-8 w-8 place-items-center rounded-[9px] bg-ink text-[15px] font-bold text-white">B</span>
-          <span className="text-[17px] font-semibold tracking-[-0.01em]">BundoPay</span>
+    <div className={`min-h-screen pb-20 pt-14 transition-[padding] duration-200 ease-out motion-reduce:transition-none md:pb-0 md:pt-0 ${rail.docked ? "md:pl-[240px]" : "md:pl-[72px]"}`}>
+      {/* Desktop: an icon rail that opens over the page on hover or focus, so the page (and its boards) never
+          reflow as the pointer passes. Pinned, it docks open and pushes the page like a classic sidebar. */}
+      <aside
+        {...rail.handlers}
+        className={`fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-2 border-b border-ink/[0.06] bg-white/70 px-4 backdrop-blur-xl md:inset-y-0 md:left-0 md:right-auto md:h-full md:flex-col md:items-stretch md:gap-8 md:overflow-hidden md:border-b-0 md:border-r md:px-4 md:py-7 md:transition-[width,box-shadow,background-color] md:duration-200 md:ease-out motion-reduce:transition-none ${
+          rail.open ? "md:w-[240px]" : "md:w-[72px]"
+        } ${rail.open && !rail.docked ? "md:bg-white/95 md:shadow-[8px_0_32px_rgb(54_33_62/0.12)]" : ""}`}
+      >
+        <div className="flex items-center gap-3 md:px-[6px]">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[9px] bg-ink text-[15px] font-bold text-white">B</span>
+          <Label open={rail.open} className="text-[17px] font-semibold tracking-[-0.01em]">BundoPay</Label>
         </div>
         {/* Phones: the tabs live in the bottom bar, within reach of a thumb. */}
         <nav aria-label="Main" className="hidden gap-1 md:flex md:flex-col">
-          {NAV.map((n) => <NavLink key={n.href} n={n} pathname={pathname} unread={unread} />)}
+          {NAV.map((n) => <NavLink key={n.href} n={n} pathname={pathname} unread={unread} open={rail.open} />)}
         </nav>
-        <button
-          onClick={() => supabase().auth.signOut()}
-          aria-label="Log out"
-          className="ml-auto flex min-h-11 items-center gap-3 rounded-xl px-3 text-[15px] font-medium text-muted hover:bg-primary/[0.06] hover:text-ink md:ml-0 md:mt-auto"
-        >
-          <Icon name="logout" />
-          <span className="hidden md:inline">Log out</span>
-        </button>
+        <div className="ml-auto flex flex-col gap-1 md:ml-0 md:mt-auto">
+          {/* Also the way in on touch screens, which have no hover to peek with. */}
+          <button
+            onClick={rail.togglePin}
+            aria-pressed={rail.pinned}
+            aria-label={rail.pinned ? "Let sidebar collapse" : "Keep sidebar open"}
+            className="hidden min-h-11 items-center gap-3 rounded-xl px-3 text-[15px] font-medium text-muted hover:bg-primary/[0.06] hover:text-ink md:flex"
+          >
+            <Icon name={rail.pinned ? "left_panel_close" : "left_panel_open"} className="shrink-0" />
+            <Label open={rail.open}>{rail.pinned ? "Collapse" : "Keep open"}</Label>
+          </button>
+          <button
+            onClick={() => supabase().auth.signOut()}
+            aria-label="Log out"
+            className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-[15px] font-medium text-muted hover:bg-primary/[0.06] hover:text-ink"
+          >
+            <Icon name="logout" className="shrink-0" />
+            <Label open={rail.open} className="hidden md:inline">Log out</Label>
+          </button>
+        </div>
       </aside>
       <nav aria-label="Main" className="safe-bottom fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-ink/[0.06] bg-white/85 px-2 pt-1.5 backdrop-blur-xl md:hidden">
         {NAV.map((n) => <NavLink key={n.href} n={n} pathname={pathname} unread={unread} compact />)}
@@ -200,10 +220,92 @@ function Frame({ pathname, children }: { pathname: string; children: React.React
   );
 }
 
-function NavLink({ n, pathname, unread, compact = false }: { n: (typeof NAV)[number]; pathname: string; unread: number; compact?: boolean }) {
+const PIN_KEY = "bundo.sidebar.pinned";
+
+/** The desktop sidebar's state. Hover opens it after a short pause and closes it after a longer one, so the
+ * pointer can cross it without a flicker; focus opens it at once, and Escape closes it (WCAG 1.4.13). While a
+ * board is being customised it never docks, so the board gets the room. */
+function useRail(pathname: string) {
+  const [pinned, setPinned] = useState(() => {
+    try {
+      return localStorage.getItem(PIN_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [peek, setPeek] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const later = (open: boolean, ms: number) => {
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setPeek(open), ms);
+  };
+
+  useEffect(() => {
+    const onEditing = (e: Event) => setEditing((e as CustomEvent<boolean>).detail);
+    window.addEventListener("board-editing", onEditing);
+    return () => {
+      window.removeEventListener("board-editing", onEditing);
+      clearTimeout(timer.current);
+    };
+  }, []);
+
+  // A tap on a touch screen focuses the link it navigates with; don't leave the panel covering the new page.
+  useEffect(() => {
+    clearTimeout(timer.current);
+    setPeek(false);
+  }, [pathname]);
+
+  const docked = pinned && !editing;
+  return {
+    pinned,
+    docked,
+    open: docked || peek,
+    togglePin() {
+      const next = !pinned;
+      setPinned(next);
+      setPeek(false);
+      try {
+        localStorage.setItem(PIN_KEY, next ? "1" : "0");
+      } catch {}
+    },
+    handlers: {
+      onMouseEnter: () => later(true, 120),
+      onMouseLeave: () => later(false, 250),
+      onFocus: () => {
+        clearTimeout(timer.current);
+        setPeek(true);
+      },
+      onBlur: (e: React.FocusEvent<HTMLElement>) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) setPeek(false);
+      },
+      onKeyDown: (e: React.KeyboardEvent) => {
+        if (e.key === "Escape") setPeek(false);
+      },
+    },
+  };
+}
+
+/** Sidebar text that fades with the rail on desktop and is always shown on phones. */
+function Label({ open, className = "", children }: { open: boolean; className?: string; children: React.ReactNode }) {
+  return (
+    <span className={`whitespace-nowrap transition-opacity duration-150 motion-reduce:transition-none ${open ? "md:opacity-100 md:delay-75" : "md:opacity-0"} ${className}`}>
+      {children}
+    </span>
+  );
+}
+
+function NavLink({ n, pathname, unread, open = true, compact = false }: { n: (typeof NAV)[number]; pathname: string; unread: number; open?: boolean; compact?: boolean }) {
   const active = n.href === "/" ? pathname === "/" : pathname.startsWith(n.href);
   const badge = n.href === "/agent" && unread > 0 && (
-    <span className={`grid h-5 min-w-5 place-items-center rounded-full bg-ink px-1.5 text-[11px] font-semibold tabular-nums text-white ${compact ? "absolute -top-1 left-1/2 ml-2" : "ml-auto"}`} aria-label={`${unread} new`}>
+    // On the closed rail the count would sit off-screen, so it shrinks to a dot on the icon.
+    <span
+      className={`grid place-items-center rounded-full bg-ink text-[11px] font-semibold tabular-nums text-white transition-all duration-200 motion-reduce:transition-none ${
+        compact ? "absolute -top-1 left-1/2 ml-2 h-5 min-w-5 px-1.5" : open ? "ml-auto h-5 min-w-5 px-1.5" : "absolute left-[30px] top-2 h-2.5 min-w-2.5 text-[0px] ring-2 ring-white"
+      }`}
+      aria-label={`${unread} new`}
+    >
       {unread}
     </span>
   );
@@ -222,12 +324,12 @@ function NavLink({ n, pathname, unread, compact = false }: { n: (typeof NAV)[num
     <Link
       href={n.href}
       aria-current={active ? "page" : undefined}
-      className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-[15px] transition ${
+      className={`relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-[15px] transition ${
         active ? "bg-card font-semibold text-ink shadow-[0_1px_2px_rgb(54_33_62/0.06),0_0_0_1px_rgb(54_33_62/0.04)]" : "font-medium text-muted hover:bg-primary/[0.06] hover:text-ink"
       }`}
     >
-      <Icon name={n.icon} />
-      <span>{n.label}</span>
+      <Icon name={n.icon} className="shrink-0" />
+      <Label open={open}>{n.label}</Label>
       {badge}
     </Link>
   );
