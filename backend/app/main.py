@@ -23,14 +23,20 @@ from app.treasury.service import TreasuryError
 from app.webhooks.router import router as webhooks_router
 
 logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("bundopay")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    settings = get_settings()
+    if settings.demo_email and not settings.gemini_api_key:
+        log.warning("!" * 72)
+        log.warning("DEMO_EMAIL is set but GEMINI_API_KEY is empty: judges will see built-in rules, not Gemini.")
+        log.warning("!" * 72)
     await open_pool()
     start_listener()
     worker_task = None
-    if get_settings().run_worker_in_process:
+    if settings.run_worker_in_process:
         from app.jobs.worker import run_in_background
 
         worker_task = asyncio.create_task(run_in_background())

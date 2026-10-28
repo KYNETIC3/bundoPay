@@ -114,6 +114,7 @@ export type CopilotResult = {
   questions: string[];
   summary: string;
   source: "model" | "rules";
+  flagged_by: ("model" | "code")[];
   verdict?: { decision: string; check: string; reason: string; source: string; money_moved: string; amount: string };
 };
 
@@ -152,9 +153,9 @@ export const CHECK_LABELS: Record<string, string> = {
   "4_hard_cap": "Above the hard cap",
   "4_period_cap": "Above a period cap",
   "5_duplicate": "Duplicate",
-  "6_liquidity_floor": "Would dip below what Operating always keeps",
+  "6_liquidity_floor": "Would leave Operating below your \u201cKeep at least\u201d amount",
   "6_balance_unknown": "PayPal shows no Operating balance. Set an allowed amount under Accounts \u2192 Safety limits",
-  "7_needs_approval": "Above your auto-run limit",
+  "7_needs_approval": "Over your \u201cApprove anything over\u201d amount",
   owner_declined: "You declined",
   nothing_to_do: "Targets already met",
 };
@@ -231,7 +232,7 @@ export function policyState(p: Policy): State {
   if (live && last && last.version > live.version) return { label: p.status === "active" ? "Running, changes to review" : "Changes to review", tone: "plum" };
   if (p.status === "paused") return { label: "Paused", tone: "cream" };
   if (p.status === "active") return { label: "Running", tone: "cerulean" };
-  if (last?.created_by === "copilot") return { label: "Draft from Copilot", tone: "soft" };
+  if (last?.created_by === "copilot") return { label: "Draft from Rules helper", tone: "soft" };
   return { label: "Draft", tone: "soft" };
 }
 
@@ -245,11 +246,11 @@ function kindOf(ref: unknown): PolicyKind | null {
   return k in KIND_LABELS ? (k as PolicyKind) : null;
 }
 
-/** "Ad-spend sweep", "Copilot request", …: a flow's title in words. */
+/** "Ad-spend sweep", "Rules helper request", …: a flow's title in words. */
 export function flowTitle(policy: string | null, startedBy: string | null): string {
   const k = kindOf(policy);
   if (k) return KIND_LABELS[k].title;
-  if (startedBy?.startsWith("copilot")) return "Copilot request";
+  if (startedBy?.startsWith("copilot")) return "Rules helper request";
   return "Jars activity";
 }
 
@@ -267,7 +268,7 @@ export function describeEntry(e: FeedEntry, currency = "USD"): Said | null {
     : "";
   const k = kindOf(d.policy);
   const doc = d.doc as PolicyDoc | undefined;
-  const by = e.label === "ai_assessment" || e.actor?.startsWith("copilot") ? "Copilot" : "You";
+  const by = e.label === "ai_assessment" || e.actor?.startsWith("copilot") ? "Rules helper" : "You";
 
   switch (e.event) {
     case "trigger.verified": {
@@ -291,7 +292,7 @@ export function describeEntry(e: FeedEntry, currency = "USD"): Said | null {
     case "execution.item_failed": return { text: "One payment in the transfer didn't go through", tone: "stop", icon: "error" };
     case "execution.refused": return { text: "Not sent: the destination account is no longer confirmed", tone: "stop", icon: "block" };
     case "capture.recorded": return { text: `A sale of ${sum || "money"} came in`, tone: "quiet", icon: "payments" };
-    case "policy.version_drafted": return { text: `${by} drafted ${doc?.name ? `“${doc.name}”` : "a rule"}`, tone: "quiet", icon: by === "Copilot" ? "auto_awesome" : "edit" };
+    case "policy.version_drafted": return { text: `${by} drafted ${doc?.name ? `“${doc.name}”` : "a rule"}`, tone: "quiet", icon: by === "Rules helper" ? "auto_awesome" : "edit" };
     case "policy.simulated": return null; // a preview moves nothing
     case "policy.approved": return { text: "You approved a rule and turned it on", tone: "good", icon: "toggle_on" };
     case "policy.paused": return { text: "A rule was paused", tone: "quiet", icon: "pause_circle" };
@@ -303,8 +304,8 @@ export function describeEntry(e: FeedEntry, currency = "USD"): Said | null {
     case "limits.updated": return { text: "Updated your safety limits", tone: "quiet", icon: "shield" };
     case "copilot.interpreted":
       return s("intent") === "move_now"
-        ? { text: "Copilot was asked to move money now, which it can't do", tone: "stop", icon: "auto_awesome" }
-        : { text: "Copilot read your request and drafted rules", tone: "quiet", icon: "auto_awesome" };
+        ? { text: "The Rules helper was asked to move money now, which it can't do", tone: "stop", icon: "auto_awesome" }
+        : { text: "The Rules helper read your request and drafted rules", tone: "quiet", icon: "auto_awesome" };
     default: return null;
   }
 }

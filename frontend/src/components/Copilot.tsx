@@ -3,24 +3,24 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { money } from "@/lib/format";
+import { aiSource, money } from "@/lib/format";
 import { CHECK_LABELS, type CopilotResult, KIND_LABELS, changed, describePolicy, treasury } from "@/lib/treasury";
 
 import { Sheet } from "./overlay";
-import { Button, Icon, IconButton, SendButton } from "./ui";
+import { Button, Icon, IconButton, Pill, SendButton } from "./ui";
 
 const EXAMPLE =
   "Hold 8.25% of every sale for tax. Keep dispute cover of 100% of open disputes plus 2% of 30-day sales. " +
   "Every Friday, sweep anything above a $25k operating floor into ad spend, up to $15k. Auto-run under $5k.";
 
-/** Plain words in, draft policies out. The copilot can't activate anything: drafts still go through the
+/** Plain words in, draft rules out. The Rules helper can't activate anything: drafts still go through the
  * simulator and your approval, and a "move money now" request is shown being blocked by the engine. */
 export function CopilotButton({ currency, onChanged }: { currency: string; onChanged: () => void }) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <IconButton icon="auto_awesome" label="Draft a rule in plain words" tone="soft" onClick={() => setOpen(true)} />
-      <Sheet open={open} onClose={() => setOpen(false)} title="Rules Copilot">
+      <Sheet open={open} onClose={() => setOpen(false)} title="Rules helper">
         <Copilot currency={currency} onChanged={onChanged} />
       </Sheet>
     </>
@@ -68,7 +68,7 @@ function Copilot({ currency, onChanged }: { currency: string; onChanged: () => v
   return (
     <div>
       <p className="mb-5 text-sm leading-relaxed text-muted">
-        Describe how you&rsquo;d like money set aside. Copilot drafts the policies; nothing changes until you preview and approve each one.
+        Describe how you&rsquo;d like money set aside. The Rules helper drafts the rules; nothing changes until you preview and approve each one.
       </p>
       <form onSubmit={ask} className="flex items-end gap-2">
         <textarea
@@ -87,16 +87,21 @@ function Copilot({ currency, onChanged }: { currency: string; onChanged: () => v
           Try an example
         </button>
       )}
-      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
 
+      <div aria-live="polite">
       {result && (
         <div className="mt-5 space-y-4">
+          <Pill tone="plum"><Icon name={aiSource(result.source).icon} className="text-[15px]" />{aiSource(result.source).label}</Pill>
           {result.intent === "move_now" && result.verdict ? (
             <div className="rounded-[14px] bg-danger-soft px-4 py-3 text-sm">
               <p className="flex items-center gap-2 font-semibold text-danger">
-                <Icon name="block" className="text-[18px]" /> Copilot can&rsquo;t move money</p>
+                <Icon name="block" className="text-[18px]" />
+                {result.flagged_by?.includes("model") ? "Gemini flagged this" : "Code flagged this"} · the safety engine blocked it ·{" "}
+                {money(result.verdict.money_moved, currency)} moved
+              </p>
               <p className="mt-1 text-ink-2">
-                Money only moves through a rule you approved, or your own tap on an approval. Nothing moved ({CHECK_LABELS[result.verdict.check]?.toLowerCase() ?? "not allowed"}).
+                Money only moves through a rule you approved, or your own tap on an approval ({CHECK_LABELS[result.verdict.check]?.toLowerCase() ?? "not allowed"}).
               </p>
             </div>
           ) : (
@@ -126,7 +131,7 @@ function Copilot({ currency, onChanged }: { currency: string; onChanged: () => v
                 result.limit_suggestions.liquidity_floor && `a ${money(result.limit_suggestions.liquidity_floor, currency)} floor`,
                 result.limit_suggestions.solo_limit && `auto-running up to ${money(result.limit_suggestions.solo_limit, currency)}`,
               ].filter(Boolean).join(" and ")}
-              . Those are account limits, so the copilot can&rsquo;t set them. Check them in{" "}
+              . Those are account limits, so the Rules helper can&rsquo;t set them. Check them in{" "}
               <Link href="/money/jars/accounts" className="font-semibold text-primary">Accounts</Link>.
             </p>
           )}
@@ -148,6 +153,7 @@ function Copilot({ currency, onChanged }: { currency: string; onChanged: () => v
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { showGuide } from "@/components/StartHere";
 import { Button, Card, CardTitle, Icon, Pill } from "@/components/ui";
 import { api } from "@/lib/api";
 import { feedback, feedbackPrefs, setFeedbackPrefs } from "@/lib/feedback";
@@ -94,12 +95,13 @@ function DemoCard() {
     <Card>
       <CardTitle>Demo account</CardTitle>
       <p className="text-sm text-muted">
-        Other judges share this login. Reset puts the treasury accounts, limits, chat and history back to the starting
+        Other judges share this login. Reset puts the jars, rules, limits, chat and history back to the starting
         point. It also resets every night. PayPal disputes stay, because they live in the PayPal sandbox.
       </p>
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <Button onClick={reset} disabled={busy}><Icon name="restart_alt" className="text-[18px]" /> Reset demo</Button>
-        {message && <span className="text-sm text-muted">{message}</span>}
+        <Button variant="ghost" onClick={() => { showGuide(); setMessage("The Start here guide is back on Home."); }}>Show guide</Button>
+        {message && <span role="status" className="text-sm text-muted">{message}</span>}
       </div>
     </Card>
   );

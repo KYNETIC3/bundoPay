@@ -3,9 +3,11 @@
 BundoPay helps PayPal sellers look after their money.
 
 - **Disputes.** When a buyer opens a dispute, BundoPay's assistant, **Bundo**, looks at it. Small ones are refunded automatically. Bigger ones wait for you to say yes or no.
-- **Treasury.** BundoPay sets money aside for tax, disputes and ads, in separate accounts. It checks every transfer against safety limits you choose, and asks you before moving large amounts.
+- **Jars.** BundoPay sets money aside for tax, disputes and ads, in separate accounts. It checks every transfer against safety limits you choose, and asks you before moving large amounts.
 
 BundoPay only uses PayPal's **test mode** (the sandbox). No real money ever moves.
+
+**Judging?** Start with [docs/JUDGES.md](docs/JUDGES.md): the login, the five-step story and where each technology is used. The three-minute script is [docs/DEMO.md](docs/DEMO.md).
 
 ---
 
@@ -15,7 +17,7 @@ BundoPay only uses PayPal's **test mode** (the sandbox). No real money ever move
 
 - [Supabase](https://supabase.com), for the database and logins
 - [PayPal Developer](https://developer.paypal.com), for PayPal's test mode
-- [Google AI Studio](https://aistudio.google.com), for the AI assistant (optional)
+- [Google AI Studio](https://aistudio.google.com), for the AI assistant (optional locally, required for the hosted demo)
 
 **Four free programs** on your computer:
 
@@ -68,7 +70,7 @@ Open **http://localhost:3000** in your browser. To stop the app, press **Ctrl+C*
 
 **5. Try it out**
 
-Create an account, click **Use test account**, then open a test dispute. The [Try it out](docs/SETUP.md#10-try-it-out) section of the guide shows you how, and how to set up Treasury.
+Create an account, click **Use test account**, then open a test dispute. The [Try it out](docs/SETUP.md#10-try-it-out) section of the guide shows you how, and how to set up Jars.
 
 ---
 

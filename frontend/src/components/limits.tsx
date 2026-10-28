@@ -77,8 +77,8 @@ export function LimitsForm({ limits, onSaved }: { limits: Limits; onSaved: () =>
   return (
     <form onSubmit={save} className="space-y-5">
       <p className="text-sm leading-relaxed text-muted">Every rule stays inside these, even when you approve a transfer.</p>
-      {field("liquidity_floor", "Always keep in Operating", "Nothing moves if Operating would drop below this.", false, true)}
-      {field("solo_limit", "Move without asking, up to", "Anything larger waits for your OK.")}
+      {field("liquidity_floor", "Keep at least", "In Operating. Nothing moves if Operating would drop below this.", false, true)}
+      {field("solo_limit", "Approve anything over", "Smaller moves run on their own; anything over this waits for your OK.")}
       {field("hard_cap_per_week", "Never move more than, per 7 days", "Counts everything moved in the last 7 days.")}
       <Details summary="More limits">
         <div className="space-y-5">

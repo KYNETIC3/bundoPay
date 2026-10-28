@@ -95,3 +95,10 @@ export function when(iso: string | null | undefined): string {
 export function clock(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
+
+/** Who did the reasoning: Gemini (whose output code then checks), or the built-in rules when no model answered. */
+export function aiSource(source: string | null | undefined): { label: string; icon: string } {
+  return source?.startsWith("model")
+    ? { label: "Reasoned by Gemini \u00b7 checked by code", icon: "auto_awesome" }
+    : { label: "Built-in rules", icon: "rule" };
+}
