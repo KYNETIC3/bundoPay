@@ -86,7 +86,11 @@ BUNDO_TOOLS = frozenset(
 )
 
 FINISH_REASONS = {"STOP": "stop", "MAX_TOKENS": "max_output_tokens", "SAFETY": "content_filter",
-                  "PROHIBITED_CONTENT": "content_filter", "BLOCKLIST": "content_filter", "SPII": "content_filter"}
+                  "PROHIBITED_CONTENT": "content_filter", "BLOCKLIST": "content_filter", "SPII": "content_filter",
+                  "MALFORMED_FUNCTION_CALL": "malformed_function_call"}
+# A malformed tool call is retried with a little more thinking, then on the main model. Studio's large widget and
+# layout schemas trip the lite model on some turns; most turns never need this.
+RETRY_THINKING = "LOW"
 
 
 _thinking_rejected: set[str] = set()  # GeminiLLM names that refused our thinking config
@@ -97,6 +101,13 @@ def studio_llm() -> GeminiLLM | None:
     s = get_settings()
     model = s.gemini_studio_model or s.gemini_fallback_model or s.gemini_model
     return GeminiLLM(s.gemini_api_key, model) if s.gemini_api_key else None
+
+
+def studio_fallback_llm() -> GeminiLLM | None:
+    """The main model, for a Studio turn the lite model keeps getting wrong. None when it is the same model."""
+    s = get_settings()
+    primary = s.gemini_studio_model or s.gemini_fallback_model or s.gemini_model
+    return GeminiLLM(s.gemini_api_key, s.gemini_model) if s.gemini_api_key and s.gemini_model != primary else None
 
 
 def thinking_level(llm: GeminiLLM) -> str | None:
@@ -298,31 +309,107 @@ async def _chunks(llm: GeminiLLM, contents: list[Any], config: Any, patient_unti
             yield item
 
 
-async def stream_turn(llm: GeminiLLM, contents: list[Any], config: Any) -> AsyncIterator[str]:
-    """Run one Gemini turn and yield SSE lines in the documented event shape."""
+def _with_thinking(llm: GeminiLLM, config: Any, level: str) -> Any:
+    from google.genai import types
+
+    thinking = None if llm.name in _thinking_rejected else types.ThinkingConfig(thinking_level=level)
+    return config.model_copy(update={"thinking_config": thinking})
+
+
+async def _attempt(llm: GeminiLLM, contents: list[Any], config: Any, patient_until: float) -> tuple[list[dict[str, Any]], str | None, Any, str]:
+    """One Gemini call, collected: (events, finish reason, usage metadata, model)."""
+    events: list[dict[str, Any]] = []
+    usage_meta, finish, model = None, None, ""
+    async for model, chunk in _chunks(llm, contents, config, patient_until):
+        usage_meta = chunk.usage_metadata or usage_meta
+        for cand in (chunk.candidates or [])[:1]:
+            if cand.finish_reason:
+                finish = getattr(cand.finish_reason, "value", str(cand.finish_reason))
+            for part in (cand.content.parts if cand.content else None) or []:
+                if part.function_call:
+                    fc = part.function_call
+                    events.append({
+                        "type": "tool_call",
+                        "id": fc.id or f"{LOCAL_ID}{uuid.uuid4().hex[:24]}",
+                        "name": fc.name,
+                        "arguments": json.dumps(fc.args or {}),
+                        "thought_signature": base64.b64encode(part.thought_signature).decode()
+                        if part.thought_signature else None,
+                    })
+                elif part.text and not part.thought:
+                    events.append({"type": "text_delta", "text": part.text})
+    return events, finish, usage_meta, model
+
+
+_JSON_TYPES: dict[str, tuple[type, ...]] = {"object": (dict,), "array": (list,), "string": (str,), "boolean": (bool,),
+                                            "integer": (int,), "number": (int, float), "null": (type(None),)}
+
+
+def _fits(value: Any, schema: Any, defs: dict[str, Any], depth: int = 0) -> bool:
+    """Shallow JSON-type check of one argument against its schema: catches a string sent where an object is
+    required. Anything it can't judge passes; Studio validates the arguments fully."""
+    if not isinstance(schema, dict) or depth > 4:
+        return True
+    ref = schema.get("$ref")
+    if isinstance(ref, str) and ref.startswith("#/$defs/"):
+        return _fits(value, defs.get(ref.removeprefix("#/$defs/")), defs, depth + 1)
+    if isinstance(schema.get("anyOf"), list):
+        return any(_fits(value, alt, defs, depth + 1) for alt in schema["anyOf"])
+    kinds = schema.get("type")
+    kinds = [kinds] if isinstance(kinds, str) else kinds
+    if not isinstance(kinds, list) or not all(k in _JSON_TYPES for k in kinds):
+        return True
+    if isinstance(value, bool) and "boolean" not in kinds:
+        return False
+    return isinstance(value, tuple(t for k in kinds for t in _JSON_TYPES[k]))
+
+
+def _args_fit(call: dict[str, Any], config: Any) -> bool:
+    decl = next((d for t in (config.tools or []) for d in (t.function_declarations or []) if d.name == call["name"]), None)
+    schema = decl.parameters_json_schema if decl else None
+    if not isinstance(schema, dict):
+        return True
+    args = json.loads(call["arguments"])
+    if not isinstance(args, dict) or any(k not in args for k in schema.get("required") or []):
+        return False
+    props, defs = schema.get("properties") or {}, schema.get("$defs") or {}
+    return all(_fits(v, props[k], defs) for k, v in args.items() if k in props)
+
+
+def _misfired(events: list[dict[str, Any]], finish: str | None, config: Any) -> bool:
+    """The model tried a tool call it couldn't fit to the schema, sent arguments of the wrong shape, or skipped a
+    tool call it was told to make."""
+    if finish == "MALFORMED_FUNCTION_CALL":
+        return True
+    if any(e["type"] == "tool_call" and not _args_fit(e, config) for e in events):
+        return True
+    fcc = config.tool_config.function_calling_config if config.tool_config else None
+    required = fcc is not None and getattr(fcc.mode, "value", fcc.mode) == "ANY"
+    return required and not any(e["type"] == "tool_call" for e in events)
+
+
+async def stream_turn(llm: GeminiLLM, contents: list[Any], config: Any, fallback: GeminiLLM | None = None) -> AsyncIterator[str]:
+    """Run one Gemini turn and yield SSE lines in the documented event shape. A turn is collected before it is
+    sent, so a malformed tool call can be retried (same model with more thinking, then `fallback`) unseen."""
+    attempts = [(llm, config), (llm, _with_thinking(llm, config, RETRY_THINKING))]
+    if fallback:
+        attempts.append((fallback, _with_thinking(fallback, config, RETRY_THINKING)))
+    events: list[dict[str, Any]] = []
     usage_meta, finish, model = None, None, ""
     # Leave room for the answer itself after waiting out Gemini's rate limit.
     patient_until = time.monotonic() + TURN_TIMEOUT_SECONDS - ANSWER_SECONDS
     try:
         async with asyncio.timeout(TURN_TIMEOUT_SECONDS):
-            async for model, chunk in _chunks(llm, contents, config, patient_until):
-                usage_meta = chunk.usage_metadata or usage_meta
-                for cand in (chunk.candidates or [])[:1]:
-                    if cand.finish_reason:
-                        finish = getattr(cand.finish_reason, "value", str(cand.finish_reason))
-                    for part in (cand.content.parts if cand.content else None) or []:
-                        if part.function_call:
-                            fc = part.function_call
-                            yield sse({
-                                "type": "tool_call",
-                                "id": fc.id or f"{LOCAL_ID}{uuid.uuid4().hex[:24]}",
-                                "name": fc.name,
-                                "arguments": json.dumps(fc.args or {}),
-                                "thought_signature": base64.b64encode(part.thought_signature).decode()
-                                if part.thought_signature else None,
-                            })
-                        elif part.text and not part.thought:
-                            yield sse({"type": "text_delta", "text": part.text})
+            for i, (attempt_llm, attempt_config) in enumerate(attempts):
+                events, finish, usage_meta, model = await _attempt(attempt_llm, contents, attempt_config, patient_until)
+                if not _misfired(events, finish, attempt_config) or i == len(attempts) - 1:
+                    break
+                tools = [d.name for t in (config.tools or []) for d in (t.function_declarations or [])]
+                why = (finish if finish == "MALFORMED_FUNCTION_CALL"
+                       else "arguments that don't fit the tool" if any(e["type"] == "tool_call" for e in events)
+                       else "no tool call")
+                log.info("studio turn retry %d after %s on %s (tools: %s)", i + 1, why, attempt_llm.name,
+                         ", ".join(tools) or "none")
     except ModelBusyError:
         yield sse({"type": "error", "message": BUSY_MESSAGE})
         return
@@ -337,7 +424,9 @@ async def stream_turn(llm: GeminiLLM, contents: list[Any], config: Any) -> Async
         yield sse({"type": "error", "message": "Bundo couldn't finish that chart step. Please try again."})
         return
     if finish and finish not in FINISH_REASONS:
-        # e.g. MALFORMED_FUNCTION_CALL: the model tried a tool call it couldn't fit to the schema.
-        log.info("studio turn ended with %s", finish)
+        tools = [d.name for t in (config.tools or []) for d in (t.function_declarations or [])]
+        log.info("studio turn ended with %s (tools: %s)", finish, ", ".join(tools) or "none")
+    for e in events:
+        yield sse(e)
     yield sse({"type": "done", "usage": _usage(usage_meta),
                "finish_reason": FINISH_REASONS.get(finish or "STOP", "other"), "model": model})
