@@ -7,8 +7,8 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 
 import { Skeleton } from "@/components/motion";
 import { PlanApproval } from "@/components/treasury";
-import { Button, Icon, Pill, SendButton } from "@/components/ui";
-import { api, json } from "@/lib/api";
+import { Button, Empty, Icon, Pill, SendButton } from "@/components/ui";
+import { ApiError, api, json } from "@/lib/api";
 import { money } from "@/lib/format";
 import { agentState } from "@/lib/status";
 import type { PlanItem } from "@/lib/treasury";
@@ -64,6 +64,7 @@ function AgentConversation() {
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [noModel, setNoModel] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
   const asked = useRef(false);
 
@@ -95,7 +96,8 @@ function AgentConversation() {
     try {
       await api("/agent/chat", json({ content: q }));
     } catch (e) {
-      setError((e as Error).message);
+      if (e instanceof ApiError && e.code === "no_model") setNoModel(true);
+      else setError((e as Error).message);
     } finally {
       await load();
       setPending(null);
@@ -169,7 +171,15 @@ function AgentConversation() {
             <Icon name="progress_activity" className="animate-spin text-[18px]" /> Bundo is checking PayPal…
           </div>
         )}
-        {error && <p className="text-sm text-danger">{error}</p>}
+        {noModel && (
+          <div role="alert">
+            <Empty icon="cloud_off" title="Chat needs Gemini, which is off on this server">
+              Bundo is still reviewing disputes and drafting responses with built-in rules. Open{" "}
+              <Link href="/money" className="font-semibold text-primary">Money</Link> to see them.
+            </Empty>
+          </div>
+        )}
+        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         <div ref={bottom} />
       </div>
 

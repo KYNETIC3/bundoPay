@@ -44,8 +44,11 @@ services:
         sync: false
       - key: AUDIT_CHAIN_KEY
         sync: false # leave empty to reuse APPROVAL_SIGNING_KEY, as in backend/.env
+      # Required for the hosted demo: without it judges see built-in rules instead of Gemini, and the login page says so.
       - key: GEMINI_API_KEY
         sync: false
+      - key: GEMINI_MODEL
+        value: "gemini-3.8-flash"
       - key: DEMO_EMAIL
         sync: false
       - key: DEMO_ACCOUNT_EMAILS

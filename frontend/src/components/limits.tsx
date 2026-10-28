@@ -22,8 +22,8 @@ export function LimitsSummary({ limits, onSaved }: { limits: Limits; onSaved: ()
         <span className="min-w-0 flex-1">
           <span className="block font-semibold">Safety limits</span>
           <span className="mt-0.5 block text-sm text-muted">
-            Always keeps <b className="font-semibold text-ink-2 tabular-nums">{money(limits.liquidity_floor, c)}</b> in Operating; moves up to{" "}
-            <b className="font-semibold text-ink-2 tabular-nums">{money(limits.solo_limit, c)}</b> without asking you.
+            Keeps at least <b className="font-semibold text-ink-2 tabular-nums">{money(limits.liquidity_floor, c)}</b> in Operating; asks you to approve anything over{" "}
+            <b className="font-semibold text-ink-2 tabular-nums">{money(limits.solo_limit, c)}</b>.
           </span>
         </span>
         <Icon name="chevron_right" className="text-muted transition group-hover:translate-x-0.5 group-hover:text-ink" />
@@ -57,7 +57,7 @@ export function LimitsForm({ limits, onSaved }: { limits: Limits; onSaved: () =>
     const bad = (["liquidity_floor", "solo_limit", "hard_cap_per_run", "hard_cap_per_week", "hard_cap_per_day", "hard_cap_per_month", "movable_when_unknown"] as const)
       .find((k) => form[k] !== null && form[k] !== "" && !/^\d+(\.\d{1,2})?$/.test(String(form[k])));
     if (bad) return setNote("Use plain numbers with up to 2 decimals, like 1500 or 1500.50.");
-    if (Number(form.solo_limit) > Number(form.hard_cap_per_run)) return setNote("“Move without asking up to” can't be more than the per-run cap.");
+    if (Number(form.solo_limit) > Number(form.hard_cap_per_run)) return setNote("“Approve anything over” can't be more than the per-run cap.");
     setBusy(true);
     setNote(null);
     try {
@@ -77,8 +77,8 @@ export function LimitsForm({ limits, onSaved }: { limits: Limits; onSaved: () =>
   return (
     <form onSubmit={save} className="space-y-5">
       <p className="text-sm leading-relaxed text-muted">Every rule stays inside these, even when you approve a transfer.</p>
-      {field("liquidity_floor", "Always keep in Operating", "Nothing moves if Operating would drop below this.", false, true)}
-      {field("solo_limit", "Move without asking, up to", "Anything larger waits for your OK.")}
+      {field("liquidity_floor", "Keep at least", "In Operating. Nothing moves if Operating would drop below this.", false, true)}
+      {field("solo_limit", "Approve anything over", "Smaller moves run on their own; anything over this waits for your OK.")}
       {field("hard_cap_per_week", "Never move more than, per 7 days", "Counts everything moved in the last 7 days.")}
       <Details summary="More limits">
         <div className="space-y-5">

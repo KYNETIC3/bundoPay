@@ -237,7 +237,7 @@ function Editor() {
           <Details>
             <dl className="divide-y divide-ink/[0.05] rounded-xl bg-card px-4 py-1 shadow-card">
               <Fact label="Version">{last.version}</Fact>
-              <Fact label="Last saved">{dateTime(last.created_at)}{last.created_by === "copilot" ? ", drafted by Copilot" : ""}</Fact>
+              <Fact label="Last saved">{dateTime(last.created_at)}{last.created_by === "copilot" ? ", drafted by the Rules helper" : ""}</Fact>
               <Fact label="Changes kept">Every saved change is kept, so you can see what was running when.</Fact>
             </dl>
           </Details>

@@ -18,13 +18,14 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [instant, setInstant] = useState(false);
   const [demoEmail, setDemoEmail] = useState<string | null>(null);
+  const [aiOff, setAiOff] = useState(false);
   const [server, setServer] = useState<"checking" | "waking" | "up" | "down">("checking");
 
   // Also wakes the hosted API, which sleeps when idle, while the judge types.
   useEffect(() => {
     const slow = setTimeout(() => setServer((s) => (s === "checking" ? "waking" : s)), 2500);
-    api<{ enabled: boolean; email: string | null }>("/demo/info")
-      .then((r) => { setDemoEmail(r.enabled ? r.email : null); setServer("up"); })
+    api<{ enabled: boolean; email: string | null; ai: boolean }>("/demo/info")
+      .then((r) => { setDemoEmail(r.enabled ? r.email : null); setAiOff(r.enabled && !r.ai); setServer("up"); })
       .catch(() => setServer("down"))
       .finally(() => clearTimeout(slow));
     api<{ auto_confirm_signups: boolean }>("/auth/config").then((r) => setInstant(r.auto_confirm_signups)).catch(() => {});
@@ -72,6 +73,11 @@ export default function LoginPage() {
             </button>
             . The password is in the submission&apos;s testing instructions.
           </p>
+          {aiOff && (
+            <p className="mt-2 flex items-start gap-1.5 text-ink-2">
+              <Icon name="info" className="mt-px text-[18px]" /> AI is off on this server; Bundo is using built-in rules.
+            </p>
+          )}
         </div>
       )}
       {server === "waking" && (

@@ -179,9 +179,9 @@ Treasury moves money into separate accounts for tax, disputes and ads.
 
 ---
 
-## 6. Get a Google AI key (optional)
+## 6. Get a Google AI key (required for the hosted demo)
 
-Bundo uses Google's Gemini AI to explain disputes and answer questions. Without a key, it still works, using simpler built-in rules.
+Bundo uses Google's Gemini AI to explain disputes, draft responses, turn plain words into rules and answer questions. On your own computer it still works without a key, using simpler built-in rules. **The hosted judge demo needs a key**: without one the API logs a warning at startup and the login page tells judges that AI is off.
 
 1. Go to https://aistudio.google.com/apikey.
 2. Click **Create API key**, and copy it into your text file.
@@ -402,7 +402,8 @@ Render's free plan sleeps after 15 minutes without visitors, and Supabase pauses
    - `FRONTEND_URL`: leave as `https://example.com` for now; you'll fix it in 11.4.
    - `DEMO_EMAIL`: the judge login email.
    - `DEMO_ACCOUNT_EMAILS`: the four emails, separated by commas.
-   - `APPROVAL_SIGNING_KEY` and `AUDIT_CHAIN_KEY`: copy them **exactly** from `backend/.env` (leave `AUDIT_CHAIN_KEY` empty if it's empty there). The demo setup in 11.5 runs on your computer, so both sides must sign with the same keys, or **Verify chain** reports a mismatch.
+   - `GEMINI_API_KEY`: **required** for the judge demo (step 6). Judges should see Gemini at work, not the fallback rules.
+   - `APPROVAL_SIGNING_KEY` and `AUDIT_CHAIN_KEY`: copy them **exactly** from `backend/.env` (leave `AUDIT_CHAIN_KEY` empty if it's empty there). The demo setup in 11.5 runs on your computer, so both sides must sign with the same keys, or the **Check records** button on Jars → Activity reports a mismatch.
 4. Click **Apply**. When it's live, open `https://<your-service>.onrender.com/health`. It should say `{"status":"ok"}`.
 
 ### 11.3 Deploy the website on Vercel

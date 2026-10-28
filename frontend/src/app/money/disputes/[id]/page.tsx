@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Countdown } from "@/components/Countdown";
 import { Button, Card, CardTitle, Icon, Pill } from "@/components/ui";
 import { api, json } from "@/lib/api";
-import { dateTime, humanize, money } from "@/lib/format";
+import { aiSource, dateTime, humanize, money } from "@/lib/format";
 import { ACTION_VERB, agentState, disputeStatus } from "@/lib/status";
 import type { DisputeDetail } from "@/lib/types";
 
@@ -140,6 +140,11 @@ export default function DisputePage() {
                 <Icon name="auto_awesome" className="text-[16px]" /> Bundo recommends
               </p>
               <h3 className="mt-1.5 text-[26px] font-semibold tracking-[-0.02em]">{rec ? headline : actionable ? "Not reviewed yet" : "Nothing to do"}</h3>
+              {rec && (
+                <p className="mt-2.5">
+                  <Pill tone="plum"><Icon name={aiSource(rec.source).icon} className="text-[15px]" />{aiSource(rec.source).label}</Pill>
+                </p>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
               {draft && ["awaiting_approval", "failed"].includes(draft.status) && (

@@ -12,6 +12,7 @@ export type MerchantStatus = {
   connected_at: string | null;
   last_synced_at: string | null;
   test_mode: boolean;
+  is_demo: boolean;
 };
 
 type Ctx = { status: MerchantStatus | null; refresh: () => Promise<void> };
