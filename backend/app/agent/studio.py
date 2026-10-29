@@ -390,7 +390,8 @@ def _misfired(events: list[dict[str, Any]], finish: str | None, config: Any) -> 
 
 async def stream_turn(llm: GeminiLLM, contents: list[Any], config: Any, fallback: GeminiLLM | None = None) -> AsyncIterator[str]:
     """Run one Gemini turn and yield SSE lines in the documented event shape. A turn is collected before it is
-    sent, so a malformed tool call can be retried (same model with more thinking, then `fallback`) unseen."""
+    sent, so a malformed tool call, or a stream that broke after its first chunk (which GeminiLLM can't retry),
+    can be retried (same model with more thinking, then `fallback`) unseen."""
     attempts = [(llm, config), (llm, _with_thinking(llm, config, RETRY_THINKING))]
     if fallback:
         attempts.append((fallback, _with_thinking(fallback, config, RETRY_THINKING)))
@@ -401,8 +402,17 @@ async def stream_turn(llm: GeminiLLM, contents: list[Any], config: Any, fallback
     try:
         async with asyncio.timeout(TURN_TIMEOUT_SECONDS):
             for i, (attempt_llm, attempt_config) in enumerate(attempts):
-                events, finish, usage_meta, model = await _attempt(attempt_llm, contents, attempt_config, patient_until)
-                if not _misfired(events, finish, attempt_config) or i == len(attempts) - 1:
+                last = i == len(attempts) - 1
+                try:
+                    events, finish, usage_meta, model = await _attempt(attempt_llm, contents, attempt_config, patient_until)
+                except ModelUnavailableError:
+                    raise  # GeminiLLM already retried and fell back; another attempt would only wait longer
+                except Exception as exc:
+                    if last:
+                        raise
+                    log.info("studio turn retry %d after a broken stream on %s: %s", i + 1, attempt_llm.name, exc)
+                    continue
+                if not _misfired(events, finish, attempt_config) or last:
                     break
                 tools = [d.name for t in (config.tools or []) for d in (t.function_declarations or [])]
                 why = (finish if finish == "MALFORMED_FUNCTION_CALL"
