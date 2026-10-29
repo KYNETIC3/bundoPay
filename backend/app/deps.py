@@ -71,7 +71,8 @@ def llm_rate_limit(merchant: CurrentMerchant = Depends(current_merchant)) -> Cur
 
 # (merchant, chart id) -> [first seen, turns so far]. A chart is one request however many turns it takes.
 _chart_turns: dict[tuple[UUID, str], list[float]] = {}
-MAX_TURNS_PER_CHART = 40
+# A dashboard's sub-agents share its chart id (one live dashboard took 29 turns), so this covers a whole dashboard.
+MAX_TURNS_PER_CHART = 120
 
 
 def chart_rate_limit(
