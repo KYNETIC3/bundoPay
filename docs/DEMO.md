@@ -8,13 +8,13 @@ Everything runs on the PayPal sandbox. No real money moves.
 
 ## Before you start
 
-- The hosted demo is set up as in [SETUP.md step 11](SETUP.md#11-host-it-for-judges), **with `GEMINI_API_KEY` set**. Without it the login page says "AI is off on this server; Bundo is using built-in rules", and the story still works, but the AI part is the fallback.
+- Open the live demo and sign in with the judge login; both are in [JUDGES.md](JUDGES.md#log-in). The hosted server has `GEMINI_API_KEY` set. If it ever doesn't, the login page says "AI is off on this server; Bundo is using built-in rules", and the story still works, but the AI part is the fallback.
 - Settings → Demo account → **Reset demo** puts the account back to its starting point (it also resets every night). After a reset it has:
   - four verified accounts: Operating, Tax, Dispute cover and Ads;
   - three rules already approved and running: an **8.25% tax jar per sale**, **dispute cover** of 100% of open disputes plus 2% of 30-day sales, and a **$15,000 weekly ads top-up** on Fridays;
   - the default limits: **Keep at least** $25,000 in Operating, **Approve anything over** $5,000.
 - Nothing about sales or disputes is faked: sales come from the test store and disputes from the sandbox buyer.
-- Have the sandbox buyer's login handy ([SETUP.md step 5.3](SETUP.md#53-note-the-buyer-account)).
+- Have the sandbox buyer's login handy ([JUDGES.md](JUDGES.md#log-in)).
 
 ## The story
 
