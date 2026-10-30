@@ -15,6 +15,10 @@ type Wire =
   | { type: "done"; usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number } }
   | { type: "error"; message: string };
 
+/** A `delegate_to` call runs a sub-agent on its own thread, `${callId}-sub`. Its turns belong to the dashboard
+ * that delegated, so they're counted under that dashboard's chart id: sub-thread -> root chart id. */
+const parentChart = new Map<string, string>();
+
 /** AG Studio's AI never talks to a model itself: this adapter sends each chart-building turn to BundoPay's backend,
  * which runs it on the same model as Ask Bundo with the keys kept server-side. The route only ever returns widget
  * specs; it has no way to move money or answer disputes. */
@@ -23,6 +27,7 @@ export const bundoAdapter: AgLlmAdapter = {
     // One chart (or one dashboard) is one conversation thread. It takes many model turns, and the backend counts
     // it once against the merchant's AI limit by this id, so a whole dashboard costs the same as one chart.
     const trace = options?.trace ?? { threadId: crypto.randomUUID(), runId: crypto.randomUUID() };
+    const chartId = parentChart.get(trace.threadId) ?? trace.threadId;
     const queue: AgAiEvent[] = [];
     let wake: (() => void) | null = null;
     let finished = false;
@@ -47,7 +52,7 @@ export const bundoAdapter: AgLlmAdapter = {
         const { data } = await supabase().auth.getSession();
         const res = await fetch(`${BASE}/agent/studio/turn`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "text/event-stream", "X-Bundo-Chart-Id": trace.threadId, ...(data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {}) },
+          headers: { "Content-Type": "application/json", Accept: "text/event-stream", "X-Bundo-Chart-Id": chartId, ...(data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {}) },
           body: JSON.stringify({ instructions: request.instructions, conversation: request.input, tools: request.tools ?? [], output_format: request.responseFormat, tool_choice: request.toolChoice }),
           signal: options?.signal,
         });
@@ -59,6 +64,7 @@ export const bundoAdapter: AgLlmAdapter = {
             text += w.text;
             push({ type: "TEXT_MESSAGE_CONTENT", messageId: msgId, delta: w.text });
           } else if (w.type === "tool_call") {
+            if (w.name === "delegate_to") parentChart.set(`${w.id}-sub`, chartId);
             push({ type: "TOOL_CALL_START", toolCallId: w.id, toolCallName: w.name });
             push({ type: "TOOL_CALL_ARGS", toolCallId: w.id, delta: w.arguments });
             push({ type: "TOOL_CALL_END", toolCallId: w.id });

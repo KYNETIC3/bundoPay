@@ -416,3 +416,39 @@ def test_well_shaped_call_is_not_retried(client, monkeypatch):
     models = _gemini(monkeypatch, TurnsModels(_delegate({"type": {"id": "data"}, "instructions": "explore"})))
     client.post("/agent/studio/turn", json=_turn(tools=[DELEGATE]))
     assert len(models.calls) == 1
+
+
+class BrokenStreamModels(TurnsModels):
+    """Sends the first chunk of a turn, then the connection breaks: past the point GeminiLLM retries."""
+
+    def __init__(self, *turns, broken=1):
+        super().__init__(*turns)
+        self.broken = broken
+
+    async def generate_content_stream(self, model, contents, config):
+        stream = await super().generate_content_stream(model, contents, config)
+        if self.broken <= 0:
+            return stream
+        self.broken -= 1
+
+        async def gen():
+            yield await anext(stream)
+            raise errors.APIError(503, {"error": {"message": "connection reset"}})
+
+        return gen()
+
+
+TEXT_THEN_CALL = [_chunk(types.Part(text="Adding it.")), *GOOD_CALL]
+
+
+def test_stream_that_breaks_midway_is_retried_unseen(client, monkeypatch):
+    # Seen live: a sub-agent's second turn ended in "Bundo couldn't finish that chart step".
+    models = _gemini(monkeypatch, BrokenStreamModels(TEXT_THEN_CALL, TEXT_THEN_CALL))
+    events = _events(client.post("/agent/studio/turn", json=_turn()))
+    assert [e["type"] for e in events] == ["text_delta", "tool_call", "done"] and len(models.calls) == 2
+
+
+def test_stream_that_breaks_on_every_attempt_is_an_error(client, monkeypatch):
+    _gemini(monkeypatch, BrokenStreamModels(TEXT_THEN_CALL, TEXT_THEN_CALL, broken=2))
+    events = _events(client.post("/agent/studio/turn", json=_turn()))
+    assert [e["type"] for e in events] == ["error"]
