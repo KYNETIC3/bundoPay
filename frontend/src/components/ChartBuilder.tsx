@@ -2,7 +2,7 @@
 
 import { type AgAiPromptStarter, type AgDataSourcesDefinition, type AgReportState, AgStudioAiModule, createAiHarness } from "ag-studio";
 import { AgStudio, AgStudioProvider } from "ag-studio-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { feedback } from "@/lib/feedback";
 import { bundoAdapter } from "@/lib/studio/adapter";
@@ -47,6 +47,10 @@ const BLANK_DASHBOARD: AgReportState = {
 };
 
 const AI_MODULES = [AgStudioAiModule];
+
+/** AG Studio's assistant is 350px wide by default, wider than a phone's card, which clipped its messages. It
+ * takes its width from the theme when it's created, so the canvas is measured first and the width capped to it. */
+const AI_PANEL_WIDTH = 350;
 
 /** Which board a chart belongs on, from the data it uses: dispute charts go to Disputes, jar and transfer charts to Jars. */
 function homeFor(w: Widget): BoardId {
@@ -186,6 +190,14 @@ function DashboardBuilder({ model, ready }: { model: AgDataSourcesDefinition; re
   const studio = useRef<AgStudio>(null);
   const [count, setCount] = useState(0);
   const [kept, setKept] = useState(false);
+  const [width, setWidth] = useState<number | null>(null);
+  const measure = useCallback((el: HTMLDivElement | null) => {
+    if (el) setWidth(el.clientWidth);
+  }, []);
+  const theme = useMemo(
+    () => (width !== null && width < AI_PANEL_WIDTH ? boardTheme.withParams({ studioAiPanelWidth: width }) : boardTheme),
+    [width],
+  );
 
   const onStateUpdated = useCallback((e: { state: AgReportState }) => {
     setCount(widgetCount(e.state));
@@ -204,12 +216,12 @@ function DashboardBuilder({ model, ready }: { model: AgDataSourcesDefinition; re
   return (
     <>
       <p className="mt-3 text-sm text-ink-2">Ask a question and Bundo lays out a few charts that answer it. Try one of the suggestions in the assistant.</p>
-      <div className="mt-4 h-[640px] overflow-hidden rounded-2xl ring-1 ring-ink/[0.08]">
-        {ready && (
+      <div ref={measure} className="mt-4 h-[640px] overflow-hidden rounded-2xl ring-1 ring-ink/[0.08]">
+        {ready && width !== null && (
           <AgStudioProvider licenseKey={process.env.NEXT_PUBLIC_AG_STUDIO_LICENSE} modules={AI_MODULES}>
             <AgStudio
               ref={studio}
-              theme={boardTheme}
+              theme={theme}
               data={model}
               initialState={BLANK_DASHBOARD}
               mode="edit"

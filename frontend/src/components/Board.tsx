@@ -16,6 +16,9 @@ const PANELS = { view: { left: [] }, edit: { left: ["data" as const], right: ["e
  * panels squeeze the widgets being arranged. Its chevron opens it whenever it's wanted. */
 const dataTucked = (s: AgReportState): AgReportState => ({ ...s, panels: { ...s.panels, data: { ...s.panels?.data, collapsed: true } } });
 
+/** The board shows the curated layout, but Studio hasn't reported it back yet. */
+const UNREPORTED = "unreported";
+
 export type BoardProps = {
   id: BoardId;
   data: AgDataSourcesDefinition;
@@ -34,10 +37,15 @@ export default function Board({ id, data, editing = false, resetSignal = 0, stat
   const studio = useRef<AgStudio>(null);
   // Phones get two columns; the four-column layout is the one merchants customise and save.
   const [columns] = useState<Columns>(() => (typeof window !== "undefined" && window.innerWidth < 640 ? 2 : 4));
+  // While the board shows the curated layout: the curated pages as Studio first reports them (it fills in
+  // defaults, so they never match curatedBoard() exactly). Matching updates, such as opening Customize, aren't
+  // saved, so the merchant keeps getting the curated layout, and any later change to it, until they change it.
+  const curated = useRef<string | null>(null);
   const [initialState] = useState(() => {
     if (state) return state;
     const saved = savedBoard(id);
     if (saved) return columns === 4 ? saved : forPhone(saved);
+    curated.current = UNREPORTED;
     return curatedBoard(id, columns);
   });
   const [rows, setRows] = useState(() => rowsUsed(initialState));
@@ -45,7 +53,11 @@ export default function Board({ id, data, editing = false, resetSignal = 0, stat
   const onStateUpdated = useCallback(
     (e: { state: AgReportState }) => {
       setRows(rowsUsed(e.state));
-      if (editing && !state) saveBoard(id, e.state);
+      const pages = JSON.stringify(e.state.pages);
+      if (curated.current === UNREPORTED) curated.current = pages;
+      if (!editing || state || pages === curated.current) return;
+      curated.current = null;
+      saveBoard(id, e.state);
     },
     [editing, id, state],
   );
@@ -56,6 +68,7 @@ export default function Board({ id, data, editing = false, resetSignal = 0, stat
     if (resetSignal === appliedReset.current) return;
     appliedReset.current = resetSignal;
     saveBoard(id, null);
+    curated.current = UNREPORTED;
     studio.current?.api?.setState(dataTucked(curatedBoard(id, columns)));
   }, [resetSignal, columns, id]);
 
