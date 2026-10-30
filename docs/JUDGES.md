@@ -6,9 +6,9 @@ BundoPay helps a PayPal seller keep three kinds of money apart (money to spend, 
 
 | | |
 |---|---|
-| **Live demo** | <LIVE_URL> |
-| **Judge login** | `<JUDGE_EMAIL>` / `<JUDGE_PASSWORD>` |
-| **PayPal sandbox buyer** | `<BUYER_EMAIL>` / `<BUYER_PASSWORD>` |
+| **Live demo** | https://bundo-pay.vercel.app/ |
+| **Judge login** | `judge@bundopay.test` / `judge123` |
+| **PayPal sandbox buyer** | `customer.bundo@gmail.com` / `bundo123` |
 
 - Use the judge login for BundoPay. Use the sandbox buyer to pay in the test store (step 1) and to open a dispute at [sandbox.paypal.com](https://www.sandbox.paypal.com) (step 3).
 - The first load can take up to a minute if the server was asleep.

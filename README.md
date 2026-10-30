@@ -15,9 +15,9 @@ BundoPay is live. You don't need to install anything.
 
 | | |
 |---|---|
-| **Live demo** | <LIVE_URL> |
-| **Judge login** | `<JUDGE_EMAIL>` / `<JUDGE_PASSWORD>` |
-| **PayPal sandbox buyer** (to pay in the test store and open a dispute) | `<BUYER_EMAIL>` / `<BUYER_PASSWORD>` |
+| **Live demo** | https://bundo-pay.vercel.app/ |
+| **Judge login** | `judge@bundopay.test` / `judge123` |
+| **PayPal sandbox buyer** (to pay in the test store and open a dispute) | `customer.bundo@gmail.com` / `bundo123` |
 
 - The first load can take up to a minute if the server was asleep. The login page says "Waking up the server" while it does.
 - Other judges share this login. **Settings → Demo account → Reset demo** puts it back to the starting point. It also resets every night.
