@@ -210,7 +210,8 @@ export function buildModel({ currency, overview, insights, disputes, records = {
         fields: [
           { id: "dispute_id", name: "Dispute", description: "PayPal's dispute ID", format: "textFormat" },
           { id: "reason", name: "Reason", description: "What the buyer says went wrong, in plain words", format: "textFormat" },
-          { id: "status", name: "Status", description: "Needs you, PayPal reviewing, Waiting on buyer, or Closed", format: "textFormat" },
+          // Studio's assistant filters on what this says; it once filtered status to "open", "won", "lost" and emptied every chart.
+          { id: "status", name: "Status", description: "Exactly one of: Needs you, PayPal reviewing, Waiting on buyer, Open, Closed. Never won or lost; use the Open disputes, Won and Lost fields for those", format: "textFormat" },
           { id: "opened", name: "Opened", description: "Day the buyer opened it", format: "dateFormat", formatOptions: { format: "d mmm" } },
           { id: "due", name: "Reply due", description: "Last day to answer PayPal", format: "dateFormat", formatOptions: { format: "d mmm" } },
           { id: "days_left", name: "Days left", description: "Days until the reply is due; blank once closed", format: "integerFormat" },
