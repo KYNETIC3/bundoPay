@@ -4,9 +4,16 @@ BundoPay helps a PayPal seller keep three kinds of money apart (money to spend, 
 
 ## Log in
 
-- Open the hosted app and sign in with the judge email shown on the login page. The password is in the Devpost testing instructions.
+| | |
+|---|---|
+| **Live demo** | https://bundo-pay.vercel.app/ |
+| **Judge login** | `judge@bundopay.test` / `judge123` |
+| **PayPal sandbox buyer** | `customer.bundo@gmail.com` / `bundo123` |
+
+- Use the judge login for BundoPay. Use the sandbox buyer to pay in the test store (step 1) and to open a dispute at [sandbox.paypal.com](https://www.sandbox.paypal.com) (step 3).
+- The first load can take up to a minute if the server was asleep.
 - If the login page says *"AI is off on this server"*, Gemini isn't configured on that server and Bundo is using its built-in rules. Everything else still works.
-- Settings → Demo account → **Reset demo** starts you over (other judges share this login).
+- Settings → Demo account → **Reset demo** starts you over (other judges share this login). It also resets every night.
 
 ## The five steps
 
@@ -32,8 +39,6 @@ Home shows these as a **Start here** card, ticked off from real data. The full s
 | AG Studio | Home and Money dashboards; Ask Bundo → build a chart | `frontend/src/components/Board.tsx`, `frontend/src/components/ChartBuilder.tsx`, `frontend/src/lib/studio/` |
 | Safety engine (our own) | "Stopped" and "Needs your OK" in Activity; the blocked injection in the Rules helper | `backend/app/safety/engine.py` |
 | Tamper-evident records (our own) | Step 5 | `backend/app/audit.py` |
-
-Some rows describe work that lands in companion pull requests (the test store, the Agent Toolkit tools and the extra grids). If a file in this table is missing, that pull request hasn't been merged yet.
 
 ## What's real
 

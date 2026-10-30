@@ -1,6 +1,8 @@
 # BundoPay setup guide
 
-This guide takes you from nothing to BundoPay running on your computer. Follow the steps in order.
+This guide takes you from nothing to your own copy of BundoPay, on your computer or hosted online. Follow the steps in order.
+
+**Judging?** You don't need this guide. BundoPay is already live: the link and logins are at the top of the [README](../README.md#try-it-now).
 
 The first time takes about 30–45 minutes. Most of it is creating accounts and copying keys.
 
@@ -9,11 +11,12 @@ The first time takes about 30–45 minutes. Most of it is creating accounts and 
 3. [Get the code](#3-get-the-code)
 4. [Set up Supabase](#4-set-up-supabase)
 5. [Set up PayPal test mode](#5-set-up-paypal-test-mode)
-6. [Get a Google AI key (optional)](#6-get-a-google-ai-key-optional)
+6. [Get a Google AI key (required for the hosted demo)](#6-get-a-google-ai-key-required-for-the-hosted-demo)
 7. [Fill in the settings files](#7-fill-in-the-settings-files)
 8. [Install the packages](#8-install-the-packages)
 9. [Start the app](#9-start-the-app)
 10. [Try it out](#10-try-it-out)
+11. [Host it for judges](#11-host-it-for-judges)
 
 ---
 
@@ -409,7 +412,7 @@ Render's free plan sleeps after 15 minutes without visitors, and Supabase pauses
    python3 -c "import secrets; print(secrets.token_urlsafe(18))"
    ```
 
-   Keep it somewhere safe. It goes in your Devpost testing instructions, never in the repo.
+   This password is published in the README and [JUDGES.md](JUDGES.md) so judges can sign in. That's acceptable because the account only touches the PayPal sandbox and resets every night, but never reuse a password you use anywhere else.
 3. **Treasury accounts.** Use the four sandbox business emails from [step 5.4](#54-create-reserve-accounts-for-treasury): operating, tax reserve, dispute buffer and ad spend, in that order.
 
 ### 11.2 Deploy the API on Render
@@ -465,7 +468,7 @@ GitHub turns off scheduled workflows after 60 days without a commit, so push at 
 
 ### 11.7 Testing instructions for Devpost
 
-Paste something like this into the submission:
+Put the live link and both logins in the README's [Try it now](../README.md#try-it-now) table and in [JUDGES.md](JUDGES.md#log-in), then paste something like this into the submission:
 
 > **Live demo:** https://your-app.vercel.app
 > **Login:** judge@bundopay.test / *the-password*

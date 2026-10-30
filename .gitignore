@@ -39,3 +39,7 @@ npm-debug.log*
 
 # Local tool folders
 /claude
+
+# Internal plans and the demo video stay off GitHub
+docs/plans/
+demo-video/

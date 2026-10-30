@@ -2,41 +2,70 @@
 
 BundoPay helps PayPal sellers look after their money.
 
-- **Disputes.** When a buyer opens a dispute, BundoPay's assistant, **Bundo**, looks at it. Small ones are refunded automatically. Bigger ones wait for you to say yes or no.
+- **Disputes.** When a buyer opens a dispute, BundoPay's assistant, **Bundo**, looks at it and drafts a reply. Small ones are refunded automatically. Bigger ones wait for you to say yes or no.
 - **Jars.** BundoPay sets money aside for tax, disputes and ads, in separate accounts. It checks every transfer against safety limits you choose, and asks you before moving large amounts.
 
-BundoPay only uses PayPal's **test mode** (the sandbox). No real money ever moves.
-
-**Judging?** Start with [docs/JUDGES.md](docs/JUDGES.md): the login, the five-step story and where each technology is used. The three-minute script is [docs/DEMO.md](docs/DEMO.md).
+**Gemini drafts. Code decides. The owner approves.** Everything runs on PayPal's **test mode** (the sandbox). No real money ever moves.
 
 ---
 
-## What you need
+## Try it now
 
-**Three free accounts:**
+BundoPay is live. You don't need to install anything.
 
-- [Supabase](https://supabase.com), for the database and logins
-- [PayPal Developer](https://developer.paypal.com), for PayPal's test mode
-- [Google AI Studio](https://aistudio.google.com), for the AI assistant (optional locally, required for the hosted demo)
+| | |
+|---|---|
+| **Live demo** | https://bundo-pay.vercel.app/ |
+| **Judge login** | `judge@bundopay.test` / `judge123` |
+| **PayPal sandbox buyer** (to pay in the test store and open a dispute) | `customer.bundo@gmail.com` / `bundo123` |
 
-**Four free programs** on your computer:
-
-- Git
-- Python 3.12 or newer
-- uv
-- Node.js 20 or newer
-
-You **don't** need Docker.
-
-The first setup takes about 30–45 minutes. Most of that is creating the accounts and copying keys.
+- The first load can take up to a minute if the server was asleep. The login page says "Waking up the server" while it does.
+- Other judges share this login. **Settings → Demo account → Reset demo** puts it back to the starting point. It also resets every night.
+- If the login page says *"AI is off on this server"*, Bundo is using its built-in rules instead of Gemini. Everything else still works.
 
 ---
 
-## Quick start
+## The five-step tour
 
-The [full setup guide](docs/SETUP.md) walks you through every step, including where to click. Here's the short version.
+Home shows these steps as a **Start here** card and ticks them off as you go. The full three-minute script is in [docs/DEMO.md](docs/DEMO.md).
 
-**1. Get the code**
+1. **Make a sale.** Home → Start here → **Open test store**, and pay with the sandbox buyer.
+2. **See tax set aside.** Money → Jars: the 8.25% tax rule moved part of that sale into the Tax jar.
+3. **Open a dispute.** Sign in to the PayPal sandbox as the buyer and choose **Report a problem** on that payment.
+4. **Review Bundo's draft and approve it.** Money → Disputes. The card says *Reasoned by Gemini · checked by code*.
+5. **Check your records.** Money → Jars → Activity: *Your records are intact*.
+
+---
+
+## Built with
+
+| Technology | What it does in BundoPay |
+|---|---|
+| PayPal Checkout (Orders v2) and JS SDK v6 | The test store and its PayPal button |
+| PayPal REST APIs | Captures (webhook), disputes and evidence, Payouts for jar transfers |
+| PayPal Agent Toolkit | Ask Bundo reads live sandbox data; anything that changes PayPal becomes a draft to approve |
+| Google Gemini | Dispute recommendations and drafts, the Rules helper, Ask Bundo |
+| AG Grid | Tables on Money → Disputes and Jars → Activity |
+| AG Studio | Home and Money dashboards; Ask Bundo → build a chart |
+| Safety engine (our own) | Checks every transfer against your limits; blocks prompt injection |
+| Tamper-evident records (our own) | A signed chain of every action, checked on the Activity page |
+
+[docs/JUDGES.md](docs/JUDGES.md) shows where each one lives in the code, and what is real and what is seeded.
+
+---
+
+## How it's hosted
+
+- **Website:** Vercel (Next.js, in `frontend/`)
+- **API and background worker:** Render (FastAPI, in `backend/`)
+- **Database and logins:** Supabase (Postgres, in `supabase/migrations/`)
+- **Payments:** PayPal sandbox only. The API refuses any non-sandbox PayPal host.
+
+---
+
+## Run it yourself
+
+You only need this to run your own copy. It takes about 30–45 minutes, mostly creating free Supabase, PayPal Developer and Google AI Studio accounts.
 
 ```bash
 git clone https://github.com/KYNETIC3/bundoPay.git
@@ -46,50 +75,14 @@ git clone https://github.com/KYNETIC3/bundoPay.git
 cd bundoPay
 ```
 
-**2. Run the setup script** (macOS)
-
 ```bash
 ./setup.sh
 ```
 
-The script checks your programs, creates the two settings files, and installs everything. At the end, it lists the settings you still need to fill in.
-
-On Windows, follow [steps 7 and 8 of the guide](docs/SETUP.md#7-fill-in-the-settings-files) instead.
-
-**3. Fill in your keys**
-
-Open `backend/.env` and `frontend/.env.local` in a text editor. Paste in the keys from your Supabase, PayPal and Google accounts. [Step 7 of the guide](docs/SETUP.md#7-fill-in-the-settings-files) shows which key goes where.
-
-**4. Start BundoPay**
+Fill in the keys in `backend/.env` and `frontend/.env.local`, then start it:
 
 ```bash
 ./dev.sh
 ```
 
-Open **http://localhost:3000** in your browser. To stop the app, press **Ctrl+C** in the terminal.
-
-**5. Try it out**
-
-Create an account, click **Use test account**, then open a test dispute. The [Try it out](docs/SETUP.md#10-try-it-out) section of the guide shows you how, and how to set up Jars.
-
----
-
-## Host it for judges
-
-To put BundoPay online for free with one shared judge login (Vercel, Render and Supabase, no credit card), follow [step 11 of the guide](docs/SETUP.md#11-host-it-for-judges).
-
----
-
-## Getting new updates
-
-When there's new code, run these from the `bundoPay` folder:
-
-```bash
-git pull
-```
-
-```bash
-./setup.sh
-```
-
-If the update adds a new file to `supabase/migrations/`, run that file once in Supabase. [Step 4.2 of the guide](docs/SETUP.md#42-create-the-database-tables) shows how.
+Open **http://localhost:3000**. The [setup guide](docs/SETUP.md) covers every step, Windows, and how to host your own copy ([step 11](docs/SETUP.md#11-host-it-for-judges)).
