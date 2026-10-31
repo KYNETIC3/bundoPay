@@ -35,7 +35,7 @@ export type BoardProps = {
  * like any other card. */
 export default function Board({ id, data, editing = false, resetSignal = 0, state, height }: BoardProps) {
   const studio = useRef<AgStudio>(null);
-  // Phones get two columns; the four-column layout is the one merchants customise and save.
+  // Phones get two columns; desktops show the saved layout as it is (four columns, or 24 for a board kept from Ask Bundo).
   const [columns] = useState<Columns>(() => (typeof window !== "undefined" && window.innerWidth < 640 ? 2 : 4));
   // While the board shows the curated layout: the curated pages as Studio first reports them (it fills in
   // defaults, so they never match curatedBoard() exactly). Matching updates, such as opening Customize, aren't

@@ -15,6 +15,9 @@ export function disputeStatus(status: string): { label: string; tone: Tone } {
   }
 }
 
+/** Every label disputeStatus gives, in board order, so the assistant's description of the field can't drift from the data. */
+export const DISPUTE_STATUS_LABELS = ["WAITING_FOR_SELLER_RESPONSE", "UNDER_REVIEW", "WAITING_FOR_BUYER_RESPONSE", "OPEN", "RESOLVED"].map((s) => disputeStatus(s).label);
+
 /** What Bundo has done, in a word or two. */
 export function agentState(d: { status: string; draft_status: string | null; draft_action: string | null }): {
   label: string;

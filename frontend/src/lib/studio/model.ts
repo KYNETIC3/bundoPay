@@ -1,6 +1,6 @@
 import type { AgDataSourcesDefinition, AgExpression, AgExpressionFieldDefinition } from "ag-studio";
 
-import { disputeStatus } from "@/lib/status";
+import { DISPUTE_STATUS_LABELS, disputeStatus } from "@/lib/status";
 import { ROLE_LABELS, type Insights, type Overview } from "@/lib/treasury";
 import type { DisputeSummary } from "@/lib/types";
 
@@ -211,7 +211,8 @@ export function buildModel({ currency, overview, insights, disputes, records = {
           { id: "dispute_id", name: "Dispute", description: "PayPal's dispute ID", format: "textFormat" },
           { id: "reason", name: "Reason", description: "What the buyer says went wrong, in plain words", format: "textFormat" },
           // Studio's assistant filters on what this says; it once filtered status to "open", "won", "lost" and emptied every chart.
-          { id: "status", name: "Status", description: "Exactly one of: Needs you, PayPal reviewing, Waiting on buyer, Open, Closed. Never won or lost; use the Open disputes, Won and Lost fields for those", format: "textFormat" },
+          // "Open" is only PayPal's catch-all, so filtering on it for open disputes would quietly drop most of them.
+          { id: "status", name: "Status", description: `Exactly one of: ${DISPUTE_STATUS_LABELS.join(", ")}. "Open" is only PayPal's catch-all state, not every unresolved dispute: to count or filter open disputes use the Open disputes field, and use Won and Lost for outcomes. Never won or lost`, format: "textFormat" },
           { id: "opened", name: "Opened", description: "Day the buyer opened it", format: "dateFormat", formatOptions: { format: "d mmm" } },
           { id: "due", name: "Reply due", description: "Last day to answer PayPal", format: "dateFormat", formatOptions: { format: "d mmm" } },
           { id: "days_left", name: "Days left", description: "Days until the reply is due; blank once closed", format: "integerFormat" },

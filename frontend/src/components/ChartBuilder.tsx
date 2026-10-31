@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { feedback } from "@/lib/feedback";
 import { bundoAdapter } from "@/lib/studio/adapter";
-import { type BoardId, GAP, ROW_HEIGHT, type Widget, pinToBoard, saveBoard } from "@/lib/studio/boards";
+import { AI_GRID_COLUMNS, type BoardId, GAP, ROW_HEIGHT, type Widget, pinToBoard, saveBoard } from "@/lib/studio/boards";
 import { describeChart } from "@/lib/studio/describe";
 import { boardTheme } from "@/lib/studio/theme";
 import { useMoneyModel } from "@/lib/studio/useModel";
@@ -33,15 +33,15 @@ const DASHBOARD_STARTERS: AgAiPromptStarter[] = [
   { label: "Is my dispute buffer enough?", prompt: "Build a dashboard comparing what's at stake in open disputes with what my Dispute cover jar already covers, by reason." },
 ];
 
-/** A blank page styled like the curated boards, so whatever the assistant builds can become one. Studio's assistant
- * always places widgets on a 24-column grid (a full-width row is xSpan 24), so the page has 24 columns: on the
- * boards' four, its layouts came out six times wider than the canvas and all but one chart was clipped. */
+/** A blank page styled like the curated boards, so whatever the assistant builds can become one. It has the
+ * assistant's 24 columns: on the boards' four, its layouts came out six times wider than the canvas and all but one
+ * chart was clipped. */
 const BLANK_DASHBOARD: AgReportState = {
   selectedPageId: "dashboard",
   pages: [
     {
       id: "dashboard",
-      layout: { columns: 24, rowHeight: ROW_HEIGHT, minWidth: 280, pagePadding: 0, backgroundColor: "transparent", widgetBackgroundColor: "#ffffff", widgetBorderEnabled: false, widgetBorderRadius: 20, widgetPadding: GAP },
+      layout: { columns: AI_GRID_COLUMNS, rowHeight: ROW_HEIGHT, minWidth: 280, pagePadding: 0, backgroundColor: "transparent", widgetBackgroundColor: "#ffffff", widgetBorderEnabled: false, widgetBorderRadius: 20, widgetPadding: GAP },
       widgets: {},
       widgetLayout: {},
     },
