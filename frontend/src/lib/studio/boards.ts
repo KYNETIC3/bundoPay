@@ -9,6 +9,9 @@ export type Columns = 2 | 4;
 export const ROW_HEIGHT = 40;
 /** Gap between widgets; AG Studio also uses it as the page's outer padding, which Board cancels with a negative margin. */
 export const GAP = 16;
+/** Studio's assistant always lays widgets out on 24 columns (a full-width row is xSpan 24), so a board built with it
+ * keeps that grid. Saved boards are therefore four columns (curated) or 24 (kept from Ask Bundo): read layout.columns. */
+export const AI_GRID_COLUMNS = 24;
 
 export type Widget = NonNullable<NonNullable<AgReportState["pages"][number]["widgets"]>[string]>;
 type Place = { xTrack: number; yTrack: number; xSpan: number; ySpan: number };
@@ -138,7 +141,7 @@ export function curatedBoard(id: BoardId, columns: Columns): AgReportState {
   return curated[id](columns);
 }
 
-/** A saved (four-column) board, re-flowed for a phone: tiles side by side, everything else full width, in the
+/** A saved board (four columns or AI_GRID_COLUMNS), re-flowed for a phone: tiles side by side, everything else full width, in the
  * order the merchant arranged them. Pinned charts and hidden cards carry over. */
 export function forPhone(state: AgReportState): AgReportState {
   const next = structuredClone(state);
@@ -161,10 +164,19 @@ export function rowsUsed(state: AgReportState): number {
 // v3: the Disputes board gained its hero tiles; older saved layouts would hide them.
 const key = (id: BoardId) => `bundo.board.${id}.v3`;
 
+/** Boards kept from Ask Bundo before its page had 24 columns were saved as four columns holding the assistant's
+ * 24-column spans, so all but one chart was clipped. Widen those back to the grid they were laid out on. */
+function repair(state: AgReportState): AgReportState {
+  for (const p of state.pages) {
+    if (p.layout?.columns === 4 && Object.values(p.widgetLayout ?? {}).some((l) => l && l.xTrack + l.xSpan > 4)) p.layout.columns = AI_GRID_COLUMNS;
+  }
+  return state;
+}
+
 export function savedBoard(id: BoardId): AgReportState | undefined {
   try {
     const raw = localStorage.getItem(key(id));
-    return raw ? (JSON.parse(raw) as AgReportState) : undefined;
+    return raw ? repair(JSON.parse(raw) as AgReportState) : undefined;
   } catch {
     return undefined;
   }
@@ -178,7 +190,7 @@ export function saveBoard(id: BoardId, state: AgReportState | null) {
   window.dispatchEvent(new CustomEvent("board-changed", { detail: id }));
 }
 
-/** Add a widget Ask Bundo built to a board, under everything already there. */
+/** Add a widget Ask Bundo built to a board, under everything already there, full width on that board's own grid. */
 export function pinToBoard(id: BoardId, widget: Widget, columns: Columns = 4) {
   const state = savedBoard(id) ?? curatedBoard(id, columns);
   const p = state.pages.find((x) => x.id === state.selectedPageId) ?? state.pages[0];
